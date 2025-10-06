@@ -71,8 +71,13 @@ pub fn hybrid_main(cli: cli::Cli) {
     // Create execution context with enhanced detection (Issue #2)
     let context = cli::context::ExecutionContext::from_cli(&cli);
     
+    // Create interface selector (Issue #3)
+    let config = cli::interface::UserConfig::default();
+    let mut selector = cli::interface::InterfaceSelector::new(context.clone(), config);
+    let interface_decision = selector.select_interface(&cli.command);
+    
     // Display the new CLI structure and global flags
-    println!("🚀 New Dora Hybrid CLI (Issues #1 & #2 Complete)");
+    println!("🚀 New Dora Hybrid CLI (Issues #1, #2 & #3 Complete)");
     println!("Global flags detected:");
     println!("  UI Mode: {:?}", cli.ui_mode.unwrap_or_default());
     println!("  Output Format: {:?}", cli.output);
@@ -96,13 +101,14 @@ pub fn hybrid_main(cli: cli::Cli) {
     println!("  TUI Capable: {}", context.terminal_capabilities.tui_capable);
     println!();
     
-    // Display context-aware decisions
-    println!("🎯 Smart Interface Decisions:");
-    println!("  Prefers TUI: {}", context.prefers_tui());
-    println!("  Force CLI: {}", context.force_cli());
-    println!("  Show Suggestions: {}", context.show_suggestions());
-    println!("  Interactive Features: {}", context.should_use_interactive_features());
-    println!("  Optimal Width: {}", context.get_optimal_output_width());
+    // Display interface selection results (Issue #3)
+    println!("🎯 Smart Interface Selection:");
+    println!("  Selected Strategy: {:?}", interface_decision.strategy);
+    println!("  Confidence: {:.2}", interface_decision.confidence);
+    println!("  Reason: {}", interface_decision.reason);
+    if let Some(fallback) = &interface_decision.fallback {
+        println!("  Fallback: {:?}", fallback);
+    }
     println!();
     
     match &cli.command {
@@ -166,8 +172,8 @@ pub fn hybrid_main(cli: cli::Cli) {
     }
     
     println!();
-    println!("✅ Issue #2 Complete: Execution Context Detection System");
-    println!("📋 Next: Issue #3 (Interface Selection Engine)");
+    println!("✅ Issue #3 Complete: Interface Selection Engine");
+    println!("📋 Next: Issue #4 (User Configuration System)");
     println!("🔗 See IMPLEMENTATION_ROADMAP.md for full plan");
 }
 

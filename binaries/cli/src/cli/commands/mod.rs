@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 // Basic command structures for now - will be enhanced in future issues
 
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct CommonArgs {
     /// Working directory
     #[clap(short = 'C', long, global = true)]
@@ -14,7 +14,7 @@ pub struct CommonArgs {
     pub config: Option<PathBuf>,
 }
 
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct DataflowArgs {
     /// Dataflow configuration file
     #[clap(value_name = "DATAFLOW")]
@@ -25,7 +25,7 @@ pub struct DataflowArgs {
     pub name: Option<String>,
 }
 
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct NodeArgs {
     /// Specific nodes to target
     #[clap(long, value_delimiter = ',')]
@@ -33,7 +33,7 @@ pub struct NodeArgs {
 }
 
 // Tier 1: Core commands
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct PsCommand {
     #[clap(flatten)]
     pub common: CommonArgs,
@@ -78,7 +78,7 @@ pub struct StopCommand {
     pub force: bool,
 }
 
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct LogsCommand {
     #[clap(flatten)]
     pub common: CommonArgs,
@@ -195,7 +195,7 @@ pub enum GraphFormat {
 }
 
 // Tier 2: Enhanced commands
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct InspectCommand {
     #[clap(flatten)]
     pub common: CommonArgs,
@@ -211,7 +211,7 @@ pub struct InspectCommand {
     pub deep: bool,
 }
 
-#[derive(Args, Clone, Debug)]
+#[derive(Args, Clone, Debug, Default)]
 pub struct DebugCommand {
     #[clap(flatten)]
     pub common: CommonArgs,

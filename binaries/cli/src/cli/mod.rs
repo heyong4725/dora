@@ -5,6 +5,7 @@ pub mod commands;
 pub mod context;
 pub mod output;
 pub mod traits;
+pub mod interface;
 
 pub use commands::*;
 
@@ -113,7 +114,7 @@ pub enum Command {
 }
 
 /// UI mode selection
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 pub enum UiMode {
     /// Smart decisions based on context
     Auto,
@@ -149,6 +150,18 @@ impl Default for UiMode {
 impl Default for OutputFormat {
     fn default() -> Self {
         OutputFormat::Auto
+    }
+}
+
+impl UiMode {
+    /// Convert to u8 for caching and comparison
+    pub fn as_u8(self) -> u8 {
+        match self {
+            UiMode::Auto => 0,
+            UiMode::Cli => 1,
+            UiMode::Tui => 2,
+            UiMode::Minimal => 3,
+        }
     }
 }
 

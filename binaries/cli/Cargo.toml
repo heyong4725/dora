@@ -30,6 +30,7 @@ crossterm = "0.27"
 is-terminal = "0.4"
 sysinfo = "0.29"
 termsize = "0.1"
+lru = "0.12"
 dora-core = { workspace = true }
 dora-message = { workspace = true }
 dora-node-api-c = { workspace = true }
