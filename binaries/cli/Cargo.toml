@@ -21,8 +21,15 @@ tracing = ["dep:dora-tracing"]
 python = ["pyo3"]
 
 [dependencies]
-clap = { version = "4.0.3", features = ["derive"] }
+clap = { version = "4.4", features = ["derive", "env"] }
+clap_complete = "4.4"
 eyre = "0.6.8"
+atty = "0.2"
+term_size = "0.3"
+crossterm = "0.27"
+is-terminal = "0.4"
+sysinfo = "0.29"
+termsize = "0.1"
 dora-core = { workspace = true }
 dora-message = { workspace = true }
 dora-node-api-c = { workspace = true }
