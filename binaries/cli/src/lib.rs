@@ -15,6 +15,9 @@ mod template;
 // New hybrid CLI module
 pub mod cli;
 
+// New TUI module  
+pub mod tui;
+
 pub use command::build;
 pub use command::{run, run_func};
 
@@ -154,9 +157,13 @@ pub fn hybrid_main(cli: cli::Cli) {
         },
         
         // Tier 3: TUI commands
-        cli::Command::Ui(_) => {
+        cli::Command::Ui(ui_cmd) => {
             println!("🖥️  Tier 3 Command: TUI - Launch TUI interface");
-            println!("💡 Will implement TUI launcher in Issue #9");
+            
+            // Launch TUI based on command
+            if let Err(e) = launch_tui(ui_cmd, &cli) {
+                eprintln!("Failed to launch TUI: {:?}", e);
+            }
         },
         cli::Command::Dashboard(_) => {
             println!("🖥️  Tier 3 Command: DASHBOARD - Interactive dashboard");
@@ -175,6 +182,32 @@ pub fn hybrid_main(cli: cli::Cli) {
     println!("✅ Issue #3 Complete: Interface Selection Engine");
     println!("📋 Next: Issue #4 (User Configuration System)");
     println!("🔗 See IMPLEMENTATION_ROADMAP.md for full plan");
+}
+
+/// Launch TUI interface based on UI command
+fn launch_tui(ui_cmd: &cli::commands::UiCommand, cli: &cli::Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use tokio::runtime::Runtime;
+    use tui::{DoraApp, ViewType, CliContext};
+    
+    // Create runtime for async TUI
+    let rt = Runtime::new()?;
+    
+    rt.block_on(async {
+        // Determine initial view based on UI command
+        let initial_view = match &ui_cmd.view {
+            Some(cli::commands::TuiView::Dashboard) | None => ViewType::Dashboard,
+            Some(cli::commands::TuiView::Dataflow) => ViewType::DataflowManager,
+            Some(cli::commands::TuiView::Performance) => ViewType::SystemMonitor,
+            Some(cli::commands::TuiView::Logs) => ViewType::LogViewer { target: "system".to_string() },
+        };
+        
+        // Create CLI context
+        let cli_context = CliContext::from_cli(cli);
+        
+        // Create and run TUI app
+        let mut app = DoraApp::new_with_context(initial_view, cli_context);
+        app.run().await
+    })
 }
 
 // Legacy conversion will be implemented in future issues when needed

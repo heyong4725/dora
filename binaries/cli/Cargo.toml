@@ -31,6 +31,8 @@ is-terminal = "0.4"
 sysinfo = "0.29"
 termsize = "0.1"
 lru = "0.12"
+ratatui = "0.28"
+shell-words = "1.1"
 dora-core = { workspace = true }
 dora-message = { workspace = true }
 dora-node-api-c = { workspace = true }
@@ -55,7 +57,7 @@ dora-coordinator = { workspace = true }
 dora-runtime = { workspace = true }
 tokio = { version = "1.20.1", features = ["full"] }
 tokio-stream = { version = "0.1.8", features = ["io-util", "net"] }
-futures = "0.3.21"
+futures = "0.3"
 duration-str = "0.5"
 tabwriter = "1.4.0"
 log = { version = "0.4.21", features = ["serde"] }

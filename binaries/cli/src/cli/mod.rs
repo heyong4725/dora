@@ -38,7 +38,7 @@ pub struct Cli {
 }
 
 /// Three-tier command structure
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     // Tier 1: Core Docker-like commands (Basic operations)
     /// List running dataflows and their status
