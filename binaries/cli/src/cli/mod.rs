@@ -6,9 +6,6 @@ pub mod context;
 pub mod output;
 pub mod traits;
 pub mod interface;
-pub mod transitions;
-pub mod state_sync;
-pub mod transition_triggers;
 
 pub use commands::*;
 
@@ -41,7 +38,7 @@ pub struct Cli {
 }
 
 /// Three-tier command structure
-#[derive(Debug, Clone, Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum Command {
     // Tier 1: Core Docker-like commands (Basic operations)
     /// List running dataflows and their status
@@ -114,14 +111,10 @@ pub enum Command {
     /// Self-management (updates, etc.)
     #[clap(name = "self")]
     Self_(SelfCommand),
-    
-    /// User preference management
-    #[clap(alias = "prefs")]
-    Preferences(PreferencesCommand),
 }
 
 /// UI mode selection
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 pub enum UiMode {
     /// Smart decisions based on context
     Auto,
