@@ -1,4 +1,4 @@
-use ratatui::{backend::Backend, layout::Rect};
+use ratatui::layout::Rect;
 use crossterm::event::KeyEvent;
 use crate::tui::{app::AppState, theme::ThemeConfig, Frame, Result};
 use super::{BaseView, View, ViewAction};
@@ -18,7 +18,7 @@ impl DataflowManagerView {
 }
 
 impl View for DataflowManagerView {
-    fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, _app_state: &AppState) {
+    fn render(&mut self, _f: &mut Frame, _area: Rect, _app_state: &AppState) {
         // TODO: Implement dataflow manager view
     }
     

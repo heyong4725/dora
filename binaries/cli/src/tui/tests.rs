@@ -1,5 +1,4 @@
-use std::time::Duration;
-use tokio_test;
+#[cfg(test)]
 
 use crate::tui::{
     app::{DoraApp, ViewType, AppState, MessageLevel},

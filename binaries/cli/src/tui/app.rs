@@ -1,29 +1,25 @@
 use ratatui::{
-    backend::{Backend, CrosstermBackend},
+    backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Color, Modifier, Style},
-    terminal::{Frame, Terminal},
     widgets::{Block, Borders, Clear, Gauge, Paragraph, Wrap},
     text::{Line, Span, Text},
+    Frame, Terminal,
 };
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
     collections::{HashMap, VecDeque},
     io,
-    path::PathBuf,
     time::{Duration, Instant},
 };
-use futures::future::BoxFuture;
 
-use crate::cli::{Command, Cli};
 use super::{
     theme::ThemeConfig,
     cli_integration::{CliContext, CommandMode},
-    views::ViewAction,
     Result,
 };
 
@@ -223,7 +219,7 @@ impl DoraApp {
         Ok(())
     }
     
-    async fn run_event_loop<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+    async fn run_event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
         loop {
             // Render current view
             terminal.draw(|f| self.ui(f))?;
@@ -248,7 +244,7 @@ impl DoraApp {
         Ok(())
     }
     
-    fn ui<B: Backend>(&mut self, f: &mut Frame<B>) {
+    fn ui(&mut self, f: &mut Frame) {
         let size = f.size();
         
         // Main layout: header + body + footer
@@ -269,7 +265,7 @@ impl DoraApp {
         self.render_overlays(f, size);
     }
     
-    fn render_header<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn render_header(&mut self, f: &mut Frame, area: Rect) {
         let title = format!("🚀 Dora TUI - {}", self.view_title());
         let header = Paragraph::new(title)
             .style(self.theme.styles.highlight_style)
@@ -282,7 +278,7 @@ impl DoraApp {
         f.render_widget(header, area);
     }
     
-    fn render_current_view<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn render_current_view(&mut self, f: &mut Frame, area: Rect) {
         use super::views::*;
         
         match &self.current_view {
@@ -319,10 +315,11 @@ impl DoraApp {
                     _ => "View not implemented yet".to_string(),
                 };
                 
+                let title = self.view_title();
                 let view_widget = Paragraph::new(content)
                     .style(Style::default().fg(self.theme.colors.text))
                     .block(
-                        self.theme.styled_block(&self.view_title())
+                        self.theme.styled_block(&title)
                             .borders(Borders::ALL)
                     )
                     .wrap(Wrap { trim: true });
@@ -332,7 +329,7 @@ impl DoraApp {
         }
     }
     
-    fn render_footer<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn render_footer(&mut self, f: &mut Frame, area: Rect) {
         let footer_text = if self.is_in_command_mode() {
             if let CommandMode::Command { buffer, cursor, .. } = &self.command_mode {
                 format!(":{}{}", buffer, if cursor == &buffer.len() { "█" } else { "" })
@@ -355,7 +352,7 @@ impl DoraApp {
         f.render_widget(footer, area);
     }
     
-    fn render_overlays<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+    fn render_overlays(&mut self, f: &mut Frame, area: Rect) {
         // Render status messages as overlay
         if let Some(status) = self.state.status_messages.back() {
             let popup_area = centered_rect(60, 20, area);

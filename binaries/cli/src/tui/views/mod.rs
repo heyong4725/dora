@@ -1,7 +1,6 @@
 use ratatui::{
-    backend::Backend,
     layout::Rect,
-    terminal::Frame,
+    Frame,
 };
 use crossterm::event::KeyEvent;
 use std::time::Duration;
@@ -28,7 +27,7 @@ pub use help::HelpView;
 /// Core trait that all TUI views must implement
 pub trait View {
     /// Render the view content
-    fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, app_state: &AppState);
+    fn render(&mut self, f: &mut Frame, area: Rect, app_state: &AppState);
     
     /// Handle key events
     fn handle_key(&mut self, key: KeyEvent, app_state: &mut AppState) -> impl std::future::Future<Output = Result<ViewAction>> + Send;
@@ -187,7 +186,7 @@ pub mod utils {
     use ratatui::{
         layout::{Constraint, Direction, Layout, Rect},
         style::{Color, Style},
-        widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Table, Row, Cell},
+        widgets::{Block, Borders, Gauge, List, ListItem, Table, Row, Cell},
         text::{Line, Span},
     };
     

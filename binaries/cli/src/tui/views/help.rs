@@ -1,12 +1,10 @@
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Modifier, Style},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
     text::{Line, Span},
 };
 use crossterm::event::{KeyCode, KeyEvent};
-use std::time::Duration;
 
 use crate::tui::{
     app::AppState,
@@ -90,7 +88,7 @@ impl HelpView {
 }
 
 impl View for HelpView {
-    fn render<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect, _app_state: &AppState) {
+    fn render(&mut self, f: &mut Frame, area: Rect, _app_state: &AppState) {
         let sections = self.get_help_sections();
         
         // Calculate layout
@@ -186,9 +184,9 @@ impl View for HelpView {
 }
 
 impl HelpView {
-    fn render_help_column<B: Backend>(
+    fn render_help_column(
         &self,
-        f: &mut Frame<B>,
+        f: &mut Frame,
         area: Rect,
         sections: &[(&str, Vec<(&str, &str)>)],
     ) {
