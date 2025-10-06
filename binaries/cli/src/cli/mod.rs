@@ -6,10 +6,6 @@ pub mod context;
 pub mod output;
 pub mod traits;
 pub mod interface;
-pub mod enhanced_interface; // Issue #13: Enhanced interface with ML-based complexity analysis
-pub mod transitions;
-pub mod state_sync;
-pub mod transition_triggers;
 
 pub use commands::*;
 
