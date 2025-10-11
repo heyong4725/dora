@@ -18,6 +18,21 @@ pub mod cli;
 // Issue #17: Inspection module
 pub mod inspection;
 
+// Issue #18: Debug module
+pub mod debug;
+
+// Issue #19: Analysis module
+pub mod analysis;
+
+// Issue #20: Logs module
+pub mod logs;
+
+// Issue #21: Help module
+pub mod help;
+
+// Issue #22: UX validation and integration module
+pub mod ux;
+
 pub use command::build;
 pub use command::{run, run_func};
 
@@ -155,7 +170,11 @@ pub fn hybrid_main(cli: cli::Cli) {
             println!("🎯 Tier 2 Command: MONITOR - Real-time monitoring");
             println!("💡 Will implement smart monitoring in Issue #14");
         },
-        
+        cli::Command::Help(_) => {
+            println!("🎯 Tier 2 Command: HELP - Smart help system");
+            println!("💡 Implemented in Issue #21 with tutorials and contextual guidance");
+        },
+
         // Tier 3: TUI commands
         cli::Command::Ui(_) => {
             println!("🖥️  Tier 3 Command: TUI - Launch TUI interface");
