@@ -369,10 +369,24 @@ impl View for DashboardView {
                 Ok(ViewAction::ExecuteCommand("new dataflow".to_string()))
             },
             
-            KeyCode::Char('?') => {
+            KeyCode::Char('?') | KeyCode::F(1) => {
                 Ok(ViewAction::ShowHelp)
             },
-            
+
+            // Issue #24: Enhanced navigation shortcuts
+            KeyCode::Char('d') => {
+                Ok(ViewAction::PushView(ViewType::DataflowManager))
+            },
+
+            KeyCode::Char('p') => {
+                Ok(ViewAction::PushView(ViewType::SystemMonitor))
+            },
+
+            KeyCode::F(5) => {
+                // Force refresh
+                Ok(ViewAction::UpdateState(StateUpdate::RefreshDataflows))
+            },
+
             _ => Ok(ViewAction::None),
         }
     }
@@ -394,11 +408,14 @@ impl View for DashboardView {
             ("↓/j", "Move down"),
             ("Enter", "Inspect selected dataflow"),
             ("Space", "Start/Stop selected dataflow"),
+            ("d", "Navigate to dataflows"),           // Issue #24
+            ("p", "Navigate to performance monitor"), // Issue #24
             ("l", "View logs for selected dataflow"),
             ("r", "Refresh dataflow list"),
+            ("F5", "Force refresh"),                  // Issue #24
             ("s", "Toggle system info display"),
             ("n", "Create new dataflow"),
-            ("?", "Show help"),
+            ("?/F1", "Show help"),
             (":", "Enter command mode"),
             ("q", "Quit"),
         ]
