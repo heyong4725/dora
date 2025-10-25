@@ -2,16 +2,31 @@
 
 **Date**: 2025-10-25
 **Issue**: #72 - Testing Consolidation Sprint
-**Status**: Phase 1 Complete ✅
+**Status**: Phase 1 Complete ✅, Phase 2 Partial ✅
+
+## Latest Update: Phase 2 Progress
+
+**Re-enabled Integration Tests**: 1/8 files ✅
+- `cli_integration.rs` - 9 tests passing ✅
+
+**Remaining Disabled**: 7/8 files (require mock methods and API refactoring)
+- `ps_integration.rs.disabled` - needs ExecutionContext::mock_* methods
+- `config_integration.rs.disabled` - needs review
+- `context_integration.rs.disabled` - needs review
+- `interface_integration.rs.disabled` - needs review
+- `start_stop_integration.rs.disabled` - needs review
+- `transition_integration.rs.disabled` - needs review
+- `tui_integration.rs.disabled` - all tests marked #[ignore], should be moved to unit tests
 
 ## Executive Summary
 
-- ✅ **145 external tests passing** (TUI views and architecture)
+- ✅ **154 external tests passing** (145 + 9 re-enabled integration tests)
 - ✅ **273 lib tests passing** (up from 0)
 - ✅ **0 compilation errors** (down from 51)
 - ⚠️ **20 lib test failures** (environment/behavior changes)
-- 🔒 **8 integration test files** still disabled (`.disabled` suffix)
-- 📊 **Total**: 418 passing tests, 20 failures, 3 ignored
+- ✅ **1/8 integration test files re-enabled** (cli_integration.rs)
+- 🔒 **7/8 integration test files** still disabled (need mock methods)
+- 📊 **Total**: 427 passing tests, 20 failures, 3 ignored
 
 ## Phase 1 Results: Lib Test Compilation Fixed ✅
 
