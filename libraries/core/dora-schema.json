@@ -18,7 +18,7 @@
   ],
   "$defs": {
     "CustomNode": {
-      "description": "Contains the input and output configuration of the node.",
+      "description": "Configuration for user-supplied custom nodes.",
       "type": "object",
       "properties": {
         "args": {
@@ -29,6 +29,7 @@
           ]
         },
         "build": {
+          "description": "Optional build command that prepares the node binary.",
           "type": [
             "string",
             "null"
@@ -73,6 +74,7 @@
           ]
         },
         "source": {
+          "description": "Location from which the node should be fetched.",
           "$ref": "#/$defs/NodeSource"
         }
       },
@@ -104,26 +106,33 @@
       ]
     },
     "EnvValue": {
+      "description": "Environment variable value type used in descriptors.",
       "anyOf": [
         {
+          "description": "Boolean value interpreted from the descriptor.",
           "type": "boolean"
         },
         {
+          "description": "Integer literal expanded from descriptor.",
           "type": "integer",
           "format": "int64"
         },
         {
+          "description": "Floating point literal expanded from descriptor.",
           "type": "number",
           "format": "double"
         },
         {
+          "description": "Raw string environment value.",
           "type": "string"
         }
       ]
     },
     "GitRepoRev": {
+      "description": "Git revision specifiers supported by Dora.",
       "oneOf": [
         {
+          "description": "Refer to a branch name.",
           "type": "object",
           "properties": {
             "Branch": {
@@ -136,6 +145,7 @@
           ]
         },
         {
+          "description": "Refer to a tag name.",
           "type": "object",
           "properties": {
             "Tag": {
@@ -148,6 +158,7 @@
           ]
         },
         {
+          "description": "Refer to an arbitrary revision string.",
           "type": "object",
           "properties": {
             "Rev": {
@@ -372,23 +383,26 @@
       "type": "string"
     },
     "NodeSource": {
+      "description": "Supported origins for custom nodes.",
       "oneOf": [
         {
+          "description": "Use files available locally.",
           "type": "string",
-          "enum": [
-            "Local"
-          ]
+          "const": "Local"
         },
         {
+          "description": "Check out the node from a Git repository.",
           "type": "object",
           "properties": {
             "GitBranch": {
               "type": "object",
               "properties": {
                 "repo": {
+                  "description": "Repository URL hosting the node.",
                   "type": "string"
                 },
                 "rev": {
+                  "description": "Optional revision override (branch, tag, or commit).",
                   "anyOf": [
                     {
                       "$ref": "#/$defs/GitRepoRev"
@@ -412,6 +426,7 @@
       ]
     },
     "OperatorDefinition": {
+      "description": "Operator entry belonging to a runtime node.",
       "type": "object",
       "properties": {
         "build": {
@@ -466,6 +481,7 @@
       },
       "oneOf": [
         {
+          "description": "Load operator from a compiled shared library.",
           "type": "object",
           "properties": {
             "shared-library": {
@@ -477,6 +493,7 @@
           ]
         },
         {
+          "description": "Run operator implemented in Python.",
           "type": "object",
           "properties": {
             "python": {
@@ -496,20 +513,25 @@
       "type": "string"
     },
     "PythonSource": {
+      "description": "Describes Python operator script path and optional environment.",
       "anyOf": [
         {
+          "description": "Only the script path is provided.",
           "type": "string"
         },
         {
+          "description": "Script path with additional configuration options.",
           "type": "object",
           "properties": {
             "conda_env": {
+              "description": "Optional name of the Conda environment to activate.",
               "type": [
                 "string",
                 "null"
               ]
             },
             "source": {
+              "description": "Path to the Python entry script or module.",
               "type": "string"
             }
           },
@@ -520,13 +542,14 @@
       ]
     },
     "RuntimeNode": {
-      "description": "List of operators running in this runtime",
+      "description": "Wrapper around a list of operator definitions for runtime nodes.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/OperatorDefinition"
       }
     },
     "SingleOperatorDefinition": {
+      "description": "Representation of a single operator dataflow node.",
       "type": "object",
       "properties": {
         "build": {
@@ -588,6 +611,7 @@
       },
       "oneOf": [
         {
+          "description": "Load operator from a compiled shared library.",
           "type": "object",
           "properties": {
             "shared-library": {
@@ -599,6 +623,7 @@
           ]
         },
         {
+          "description": "Run operator implemented in Python.",
           "type": "object",
           "properties": {
             "python": {
