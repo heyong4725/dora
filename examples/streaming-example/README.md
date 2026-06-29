@@ -32,9 +32,12 @@ Prompt Source (0.5 Hz) --> Generator --> tokens (streamed) --> Sink
 ## Run
 
 ```bash
-pip install dora-rs pyarrow
 dora run examples/streaming-example/dataflow.yml --uv --stop-after 15s
 ```
+
+With `--uv`, Dora provisions the example's Python dependencies from the
+descriptor `build:` steps. If you run without `--uv`, install `dora-rs`
+and `pyarrow` in your active Python environment first.
 
 ## Expected Output
 

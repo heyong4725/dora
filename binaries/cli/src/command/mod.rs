@@ -439,6 +439,18 @@ mod tests {
         parse_ok(&["dora", "hub", "info", "dora-yolo@^0.5"]);
         parse_ok(&["dora", "hub", "list", "dataflow.yml"]);
         parse_ok(&["dora", "hub", "fetch", "dataflow.yml", "--target-dir", "c"]);
+        parse_ok(&["dora", "hub", "publish", "path/to/node", "--dry-run"]);
+        parse_ok(&[
+            "dora",
+            "hub",
+            "yank",
+            "dora-yolo@0.5.0",
+            "--reason",
+            "broken",
+        ]);
+        parse_ok(&["dora", "hub", "yank", "dora-yolo@0.5.0", "--undo"]);
+        parse_ok(&["dora", "hub", "outdated", "dataflow.yml"]);
+        parse_ok(&["dora", "hub", "update", "dataflow.yml", "--dry-run"]);
         parse_err(&["dora", "hub"]);
         parse_err(&["dora", "hub", "info"]);
     }
@@ -717,8 +729,41 @@ mod tests {
     }
 
     #[test]
+    fn parse_cluster_restart() {
+        parse_ok(&["dora", "cluster", "restart", "cluster.yml", "my-dataflow"]);
+    }
+
+    #[test]
+    fn parse_cluster_install() {
+        parse_ok(&["dora", "cluster", "install", "cluster.yml"]);
+    }
+
+    #[test]
+    fn parse_cluster_uninstall() {
+        parse_ok(&["dora", "cluster", "uninstall", "cluster.yml"]);
+    }
+
+    #[test]
+    fn parse_cluster_upgrade() {
+        parse_ok(&["dora", "cluster", "upgrade", "cluster.yml"]);
+    }
+
+    #[test]
     fn reject_cluster_up_no_file() {
         parse_err(&["dora", "cluster", "up"]);
+    }
+
+    #[test]
+    fn reject_cluster_service_commands_no_file() {
+        parse_err(&["dora", "cluster", "install"]);
+        parse_err(&["dora", "cluster", "uninstall"]);
+        parse_err(&["dora", "cluster", "upgrade"]);
+    }
+
+    #[test]
+    fn reject_cluster_restart_missing_args() {
+        parse_err(&["dora", "cluster", "restart"]);
+        parse_err(&["dora", "cluster", "restart", "cluster.yml"]);
     }
 
     #[test]

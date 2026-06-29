@@ -31,8 +31,12 @@ pip install dora-rs pyarrow
 ## Run
 
 ```bash
-dora run dataflow.yml
+dora run dataflow.yml --uv
 ```
+
+With `--uv`, Dora provisions PyArrow and the local Dora Python runtime from
+the descriptor `build:` steps. If you run without `--uv`, install `dora-rs`
+and `pyarrow` in your active Python environment first.
 
 Expected output:
 

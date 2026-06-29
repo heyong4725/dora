@@ -24,20 +24,24 @@ warnings and errors, demonstrating in-dataflow log aggregation.
 
 ```bash
 # Basic run (5 seconds)
-dora run dataflow.yml --stop-after 5s
+dora run dataflow.yml --uv --stop-after 5s
 
 # Show only warnings and above
-dora run dataflow.yml --log-level warn --stop-after 5s
+dora run dataflow.yml --uv --log-level warn --stop-after 5s
 
 # Per-node filtering: debug for monitor, warn for sensor
-dora run dataflow.yml --log-filter "monitor=debug,sensor=warn" --stop-after 5s
+dora run dataflow.yml --uv --log-filter "monitor=debug,sensor=warn" --stop-after 5s
 
 # JSON output for machine parsing
-dora run dataflow.yml --log-format json --stop-after 3s
+dora run dataflow.yml --uv --log-format json --stop-after 3s
 
 # Using environment variables
-DORA_LOG_LEVEL=warn dora run dataflow.yml --stop-after 5s
+DORA_LOG_LEVEL=warn dora run dataflow.yml --uv --stop-after 5s
 ```
+
+With `--uv`, Dora provisions PyArrow and the local Dora Python runtime from
+the descriptor `build:` steps. If you run without `--uv`, install `dora-rs`
+and `pyarrow` in your active Python environment first.
 
 ## Running (Distributed Mode)
 
@@ -49,10 +53,10 @@ required for multi-machine deployments.
 dora up
 
 # 2a. Start attached (live log stream, Ctrl-C to detach)
-dora start dataflow.yml --attach
+dora start dataflow.yml --uv --attach
 
 # 2b. Or start detached and query logs separately
-dora start dataflow.yml
+dora start dataflow.yml --uv
 ```
 
 Once running, use `dora logs` to query any node:

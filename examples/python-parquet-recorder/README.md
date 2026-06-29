@@ -19,6 +19,9 @@ The recorder starts first and sends a `"ready"` status message. The camera waits
 
 ## Prerequisites
 
+When using `--uv`, the descriptor installs the Python packages declared in
+`build:` for each node. For manual environments, install:
+
 ```bash
 pip install dora-rs numpy opencv-python pyarrow pandas
 ```
@@ -36,7 +39,7 @@ pip install dora-rs numpy opencv-python pyarrow pandas
 ## Run
 
 ```bash
-dora run dataflow.yml
+dora run dataflow.yml --uv
 ```
 
 Recorded files appear in `logs/`:

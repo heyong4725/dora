@@ -20,6 +20,11 @@ use tracing::info;
 use super::{Descriptor, DescriptorExt, resolve_path};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CheckDataflowOptions {
+    pub skip_python_runtime_check: bool,
+}
+
 /// Validate input/output wiring without checking path existence.
 ///
 /// This is safe to run before building nodes. It verifies every input
@@ -52,6 +57,14 @@ pub fn check_wiring(dataflow: &Descriptor) -> eyre::Result<()> {
 }
 
 pub fn check_dataflow(dataflow: &Descriptor, working_dir: &Path) -> eyre::Result<()> {
+    check_dataflow_with_options(dataflow, working_dir, CheckDataflowOptions::default())
+}
+
+pub fn check_dataflow_with_options(
+    dataflow: &Descriptor,
+    working_dir: &Path,
+    options: CheckDataflowOptions,
+) -> eyre::Result<()> {
     // validate ROS2 bridge configs before resolution
     for node in &dataflow.nodes {
         if let Some(ros2) = &node.ros2 {
@@ -139,7 +152,7 @@ pub fn check_dataflow(dataflow: &Descriptor, working_dir: &Path) -> eyre::Result
             .context("Could not resolve `max_rotated_files` configuration")?;
     }
 
-    if has_python_operator {
+    if has_python_operator && !options.skip_python_runtime_check {
         check_python_runtime()?;
     }
 
@@ -1245,6 +1258,34 @@ operators:
         let node = runtime_node();
         let nodes = BTreeMap::from([(node.id.clone(), node)]);
         check_input(&user_input("runtime-node", "op1/out"), &nodes, "sink/in").unwrap();
+    }
+
+    #[test]
+    fn python_runtime_check_can_be_skipped_for_managed_uv_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("op.py"), "class Operator:\n    pass\n").unwrap();
+        let descriptor: Descriptor = serde_yaml::from_str(
+            r#"
+nodes:
+  - id: runtime-node
+    operator:
+      python: op.py
+      inputs:
+        tick: dora/timer/millis/10
+      outputs:
+        - out
+"#,
+        )
+        .unwrap();
+
+        check_dataflow_with_options(
+            &descriptor,
+            dir.path(),
+            CheckDataflowOptions {
+                skip_python_runtime_check: true,
+            },
+        )
+        .unwrap();
     }
 
     #[test]

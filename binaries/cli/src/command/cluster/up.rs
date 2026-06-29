@@ -16,7 +16,7 @@ use crate::{
     common::{connect_to_coordinator, connect_with_retry},
 };
 
-use super::config::ClusterConfig;
+use super::config::{ClusterConfig, MachineConfig};
 use super::{
     format_daemon_port_arg, format_labels_arg, format_zenoh_peer_arg, query_connected_daemons,
     run_ssh, ssh_target,
@@ -36,6 +36,20 @@ pub struct Up {
     /// Path to the cluster configuration file
     #[clap(value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
     config: PathBuf,
+}
+
+fn remote_daemon_command(config: &ClusterConfig, machine: &MachineConfig) -> String {
+    let labels_arg = format_labels_arg(&machine.labels);
+    let daemon_port_arg = format_daemon_port_arg(machine.daemon_port);
+    let zenoh_peer_arg = format_zenoh_peer_arg(config.zenoh_peer.as_deref());
+
+    format!(
+        "nohup dora daemon --machine-id {id} --coordinator-addr {addr} --coordinator-port {port}{daemon_port_arg}{zenoh_peer_arg}{labels} --quiet > /tmp/dora-daemon-{id}.log 2>&1 &",
+        id = machine.id,
+        addr = config.coordinator.addr,
+        port = config.coordinator.port,
+        labels = labels_arg,
+    )
 }
 
 impl Executable for Up {
@@ -60,19 +74,10 @@ impl Executable for Up {
         };
 
         // 2. SSH into each machine to start a daemon
-        let zenoh_peer_arg = format_zenoh_peer_arg(config.zenoh_peer.as_deref());
         let mut ssh_failures: Vec<(String, String)> = Vec::new();
         for machine in &config.machines {
             let target = ssh_target(machine);
-            let labels_arg = format_labels_arg(&machine.labels);
-            let daemon_port_arg = format_daemon_port_arg(machine.daemon_port);
-            let remote_cmd = format!(
-                "nohup dora daemon --machine-id {id} --coordinator-addr {addr} --coordinator-port {port}{daemon_port_arg}{zenoh_peer_arg}{labels} --quiet > /tmp/dora-daemon-{id}.log 2>&1 &",
-                id = machine.id,
-                addr = config.coordinator.addr,
-                port = config.coordinator.port,
-                labels = labels_arg,
-            );
+            let remote_cmd = remote_daemon_command(&config, machine);
 
             println!("Starting daemon on {} ({})", machine.id, target);
             match run_ssh(&target, machine.port, &remote_cmd) {
@@ -182,4 +187,42 @@ fn start_coordinator(port: u16) -> eyre::Result<()> {
     cmd.spawn().wrap_err("failed to start dora coordinator")?;
     println!("Started coordinator on 0.0.0.0:{port}");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::config::{CoordinatorConfig, MachineConfig};
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn remote_daemon_command_includes_cluster_runtime_options() {
+        let mut labels = BTreeMap::new();
+        labels.insert("arch".to_string(), "arm64".to_string());
+        labels.insert("gpu".to_string(), "true".to_string());
+
+        let config = ClusterConfig {
+            coordinator: CoordinatorConfig {
+                addr: "10.0.0.1".parse().unwrap(),
+                port: 7777,
+            },
+            zenoh_peer: Some("tcp/10.0.0.1:5456".to_string()),
+            machines: Vec::new(),
+        };
+        let machine = MachineConfig {
+            id: "gpu-a".to_string(),
+            host: "10.0.0.2".to_string(),
+            user: Some("robot".to_string()),
+            port: Some(2222),
+            daemon_port: Some(53292),
+            labels,
+        };
+
+        let cmd = remote_daemon_command(&config, &machine);
+
+        assert_eq!(
+            cmd,
+            "nohup dora daemon --machine-id gpu-a --coordinator-addr 10.0.0.1 --coordinator-port 7777 --local-listen-port 53292 --zenoh-peer tcp/10.0.0.1:5456 --labels arch=arm64,gpu=true --quiet > /tmp/dora-daemon-gpu-a.log 2>&1 &"
+        );
+    }
 }

@@ -2,6 +2,7 @@ nodes:
   # ── Camera 0 ──────────────────────────────────────
   - id: webcam_0
     path: webcam.py
+    build: pip install opencv-python pyarrow
     inputs:
       tick: dora/timer/millis/50
     outputs:
@@ -11,6 +12,7 @@ nodes:
 
   - id: object_detection_0
     path: object_detection.py
+    build: pip install numpy pyarrow ultralytics
     restart_policy: on-failure
     inputs:
       image: webcam_0/image
@@ -19,6 +21,7 @@ nodes:
 
   - id: plot_0
     path: plot.py
+    build: pip install opencv-python
     restart_policy: on-failure
     inputs:
       image: webcam_0/image
@@ -29,6 +32,7 @@ nodes:
   # ── Camera 1 ──────────────────────────────────────
   - id: webcam_1
     path: webcam.py
+    build: pip install opencv-python pyarrow
     inputs:
       tick: dora/timer/millis/50
     outputs:
@@ -38,6 +42,7 @@ nodes:
 
   - id: object_detection_1
     path: object_detection.py
+    build: pip install numpy pyarrow ultralytics
     restart_policy: on-failure
     inputs:
       image: webcam_1/image
@@ -46,6 +51,7 @@ nodes:
 
   - id: plot_1
     path: plot.py
+    build: pip install opencv-python
     restart_policy: on-failure
     inputs:
       image: webcam_1/image

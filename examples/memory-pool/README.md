@@ -4,6 +4,8 @@
 
 This example exercises Dora's pinned memory-pool transport for repeated tensor transfer between a sender node and a receiver node. The positive scenarios keep the existing throughput-oriented behavior, and the negative scenarios verify that lifecycle errors are surfaced as warnings instead of crashing the nodes.
 
+The memory-pool transport currently requires Linux because it uses `/dev/shm`.
+
 ## Install
 
 ```bash
@@ -73,7 +75,7 @@ Expected warnings/info:
 ## Notes
 
 - The scenario is controlled through the `memory_pool_scenario` environment variable in each YAML file.
-- `cpu2cpu.yml` and the four negative-lifecycle YAMLs use CPU-only receiver (`receiver_device: cpu`) and are safe for GPU-less CI runners.
+- `cpu2cpu.yml` and the four negative-lifecycle YAMLs use CPU-only receiver (`receiver_device: cpu`) and are safe for GPU-less Linux CI runners.
 - The CUDA receiver scenarios (`cpu2cuda.yml`, `cuda2cpu.yml`) require a working CUDA runtime.
 - The negative scenarios use a reduced message count to keep lifecycle validation short and focused.
 - When running with `--uv`, each YAML's `build:` step provisions torch (CPU-only from `download.pytorch.org/whl/cpu`) into per-node managed environments, so no pre-installed torch is needed.

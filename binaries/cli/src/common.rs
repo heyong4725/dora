@@ -306,6 +306,21 @@ pub(crate) fn write_events_to() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::Mutex,
+    };
+
+    static CURRENT_DIR_LOCK: Mutex<()> = Mutex::new(());
+
+    struct CurrentDirGuard(PathBuf);
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.0);
+        }
+    }
 
     #[test]
     fn working_dir_or_parent_prefers_override() {
@@ -354,5 +369,43 @@ mod tests {
         let missing = Path::new("/definitely/not/a/real/path/for/tests");
         let dataflow = Path::new("/tmp/does-not-matter.yml");
         assert!(canonicalize_working_dir(Some(missing), dataflow).is_err());
+    }
+
+    #[test]
+    fn resolve_dataflow_downloads_url_to_current_dir() {
+        let _current_dir_lock = CURRENT_DIR_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let previous_dir = current_dir().unwrap();
+        let _restore_current_dir = CurrentDirGuard(previous_dir);
+        std::env::set_current_dir(tmp.path()).unwrap();
+
+        let body = "nodes: []\n";
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 2048];
+            let _ = stream.read(&mut request).unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\n\
+                 Content-Length: {}\r\n\
+                 Content-Type: application/x-yaml\r\n\
+                 Content-Disposition: attachment; filename=\"downloaded-dataflow.yml\"\r\n\
+                 Connection: close\r\n\
+                 \r\n\
+                 {body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+
+        let resolved = resolve_dataflow(format!("http://{addr}/dataflow.yml")).unwrap();
+        server.join().unwrap();
+
+        assert_eq!(resolved.file_name().unwrap(), "downloaded-dataflow.yml");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("downloaded-dataflow.yml")).unwrap(),
+            body
+        );
     }
 }

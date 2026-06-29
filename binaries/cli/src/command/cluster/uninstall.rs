@@ -22,6 +22,15 @@ pub struct Uninstall {
     config: PathBuf,
 }
 
+fn uninstall_command(service_name: &str) -> String {
+    format!(
+        "sudo systemctl stop {service_name} 2>/dev/null; \
+         sudo systemctl disable {service_name} 2>/dev/null; \
+         sudo rm -f /etc/systemd/system/{service_name}.service; \
+         sudo systemctl daemon-reload"
+    )
+}
+
 impl Executable for Uninstall {
     fn execute(self) -> eyre::Result<()> {
         default_tracing()?;
@@ -32,13 +41,7 @@ impl Executable for Uninstall {
         for machine in &config.machines {
             let target = ssh_target(machine);
             let service_name = format!("dora-daemon-{}", machine.id);
-
-            let cmd = format!(
-                "sudo systemctl stop {service_name} 2>/dev/null; \
-                 sudo systemctl disable {service_name} 2>/dev/null; \
-                 sudo rm -f /etc/systemd/system/{service_name}.service; \
-                 sudo systemctl daemon-reload"
-            );
+            let cmd = uninstall_command(&service_name);
 
             println!("Uninstalling {service_name} from {} ({target})", machine.id);
             let result = run_ssh(&target, machine.port, &cmd);
@@ -61,5 +64,20 @@ impl Executable for Uninstall {
                 config.machines.len()
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uninstall_command_stops_disables_removes_and_reloads_unit() {
+        let cmd = uninstall_command("dora-daemon-arm");
+
+        assert!(cmd.contains("sudo systemctl stop dora-daemon-arm"));
+        assert!(cmd.contains("sudo systemctl disable dora-daemon-arm"));
+        assert!(cmd.contains("sudo rm -f /etc/systemd/system/dora-daemon-arm.service"));
+        assert!(cmd.contains("sudo systemctl daemon-reload"));
     }
 }

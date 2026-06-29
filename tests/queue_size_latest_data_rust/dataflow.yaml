@@ -1,6 +1,7 @@
 nodes:
   - id: send_data
     path: ../queue_size_latest_data_python/send_data.py
+    build: pip install pyarrow
     inputs:
       tick: dora/timer/millis/10
     outputs:

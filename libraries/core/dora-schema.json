@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "env": {
-      "description": "Global environment variables inherited by every node.\n\nEach node's own `env` map takes precedence on key conflicts, so nodes\ncan override a global default without repeating shared values like\n`RUST_LOG`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or `CUDA_VISIBLE_DEVICES`.\n\n## Example\n\n```yaml\nenv:\n  RUST_LOG: info\n  OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317\nnodes:\n  - id: verbose-node\n    path: path/to/node\n    env:\n      RUST_LOG: debug  # overrides the global RUST_LOG for this node\n```",
+      "description": "Global environment variables inherited by every node.\n\nEach node's own `env` map takes precedence on key conflicts, so nodes\ncan override a global default without repeating shared values like\n`RUST_LOG`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or `CUDA_VISIBLE_DEVICES`.\nValues support strings, numbers, booleans, `$VAR` expansion, and\n`{ __dora_env: HOST_VAR }` host-environment lookup.\n\n## Example\n\n```yaml\nenv:\n  RUST_LOG: info\n  OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317\nnodes:\n  - id: verbose-node\n    path: path/to/node\n    env:\n      RUST_LOG: debug  # overrides the global RUST_LOG for this node\n```",
       "type": [
         "object",
         "null"
@@ -274,6 +274,17 @@
         },
         {
           "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "__dora_env": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "__dora_env"
+          ]
         }
       ]
     },
@@ -460,7 +471,7 @@
           ]
         },
         "cpu_affinity": {
-          "description": "CPU cores to pin this node's process to (Linux only, ignored on other platforms).\n\n## Example\n\n```yaml\nnodes:\n  - id: fast_node\n    path: ./fast_node\n    cpu_affinity: [0, 1]\n```",
+          "description": "CPU cores to pin this node's process to (Linux only, warns and ignores on other platforms).\n\n## Example\n\n```yaml\nnodes:\n  - id: fast_node\n    path: ./fast_node\n    cpu_affinity: [0, 1]\n```",
           "type": [
             "array",
             "null"
@@ -490,7 +501,7 @@
           ]
         },
         "env": {
-          "description": "Environment variables for node builds and execution.\n\nKey-value map of environment variables that should be set for both the\n[`build`](Self::build) operation and the node execution (i.e. when the node is spawned\nthrough [`path`](Self::path)).\n\nSupports strings, numbers, and booleans.\n\n## Example\n\n```yaml\nnodes:\n  - id: example-node\n    path: path/to/node\n    env:\n      DEBUG: true\n      PORT: 8080\n      API_KEY: \"secret-key\"\n```",
+          "description": "Environment variables for node builds and execution.\n\nKey-value map of environment variables that should be set for both the\n[`build`](Self::build) operation and the node execution (i.e. when the node is spawned\nthrough [`path`](Self::path)).\n\nSupports strings, numbers, booleans, `$VAR` expansion, and\n`{ __dora_env: HOST_VAR }` host-environment lookup.\n\n## Example\n\n```yaml\nnodes:\n  - id: example-node\n    path: path/to/node\n    env:\n      DEBUG: true\n      PORT: 8080\n      API_KEY: \"secret-key\"\n```",
           "type": [
             "object",
             "null"

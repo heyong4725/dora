@@ -1,6 +1,6 @@
 # input_timeout checks run on NodeHealthCheckInterval ticks — override
 # the default 5 s so the 0.5 s timeout can actually fire inside the
-# test's stop_after window.
+# test's bounded stop_after window.
 health_check_interval: 0.1
 
 nodes:

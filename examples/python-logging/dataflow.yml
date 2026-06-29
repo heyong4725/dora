@@ -1,6 +1,7 @@
 nodes:
   - id: sensor
     path: sensor.py
+    build: pip install pyarrow
     min_log_level: info       # suppress debug noise at source
     max_log_size: "1KB"       # small for demo (triggers rotation quickly)
     inputs:
@@ -10,6 +11,7 @@ nodes:
 
   - id: processor
     path: processor.py
+    build: pip install pyarrow
     send_logs_as: log_entries  # route structured logs as data
     inputs:
       reading: sensor/reading
@@ -19,6 +21,7 @@ nodes:
 
   - id: monitor
     path: monitor.py
+    build: pip install pyarrow
     inputs:
       logs: processor/log_entries
       reading: sensor/reading

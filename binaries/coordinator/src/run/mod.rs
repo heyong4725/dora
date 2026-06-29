@@ -393,6 +393,31 @@ mod tests {
         assert!(errors.is_empty());
     }
 
+    #[test]
+    fn resolve_daemon_reports_missing_machine_id() {
+        let mut connections = DaemonConnections::default();
+        let (tx, _rx) = mpsc::channel::<String>(1);
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        connections.add(
+            DaemonId::new(Some("available".to_string())),
+            DaemonConnection::new(tx, pending, BTreeMap::new()),
+        );
+        let deploy = Deploy {
+            machine: Some("missing".to_string()),
+            working_dir: None,
+            labels: BTreeMap::new(),
+            distribute: Default::default(),
+        };
+
+        let err = resolve_daemon(&connections, Some(&deploy)).unwrap_err();
+        let err_msg = format!("{err:#}");
+
+        assert!(
+            err_msg.contains("no matching daemon for machine id `missing`"),
+            "unexpected error: {err_msg}"
+        );
+    }
+
     #[tokio::test]
     async fn spawn_failure_triggers_rollback_on_previous_daemons() {
         let clock = HLC::default();

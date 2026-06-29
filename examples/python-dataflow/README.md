@@ -29,15 +29,16 @@ The receiver has two inputs: raw `message` from sender and `transformed` from tr
 
 | File | Description |
 |------|-------------|
-| `dataflow.yml` | Standard sender/transformer/receiver pipeline. Script-only Python nodes (no `build:` blocks) — runs against your ambient Python. |
+| `dataflow.yml` | Standard sender/transformer/receiver pipeline. Each node has a small `build:` line so `--uv` provisions PyArrow and the Dora Python runtime in managed per-node envs. |
 | `dataflow_dynamic.yml` | Camera + opencv-plot vision pipeline with dynamic node loading. Each node has its own `build:` line (different `git+` install per node), so it's the natural fit for the `--uv` managed-env flow below. |
 
 ## Prerequisites
 
-Install the Python node API (the PyPI package is `dora-rs`, **not** `dora`):
+If you run without `--uv`, install the Python node API and PyArrow in your
+active environment (the PyPI package is `dora-rs`, **not** `dora`):
 
 ```bash
-pip install dora-rs
+pip install dora-rs pyarrow
 ```
 
 > **Note:** The Python import name is `dora` (`from dora import Node`), but the
@@ -47,16 +48,15 @@ pip install dora-rs
 ## Run
 
 ```bash
-dora run dataflow.yml
-```
-
-Or pass `--uv` to run the Python nodes through `uv` instead of the system Python:
-
-```bash
 dora run dataflow.yml --uv
 ```
 
-For `dataflow.yml` (script-only nodes, no `build:` blocks) this just routes spawns through `uv run python` against your active `uv` env — there are no per-node deps for dora to install. See the next section for the case where `--uv` actually creates per-node managed envs.
+To use the active Python environment instead of managed per-node envs, omit
+`--uv` after installing the prerequisites:
+
+```bash
+dora run dataflow.yml
+```
 
 Expected output (receiver logs):
 

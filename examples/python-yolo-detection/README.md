@@ -32,7 +32,10 @@ timer --> webcam_1 --> object_detection_1 --> plot_1  (Camera 1)
 
 ## Prerequisites
 
-Download the YOLOv8-nano weights before running:
+When using `--uv`, the descriptors install the Python packages declared in
+`build:` for each node. The first object-detection run downloads the
+YOLOv8-nano weights, so network access is required unless `yolov8n.pt` is
+already available. For manual environments, install and prefetch with:
 
 ```bash
 pip install dora-rs numpy opencv-python pyarrow ultralytics
@@ -46,13 +49,13 @@ python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 Single camera:
 
 ```bash
-dora run dataflow.yml
+dora run dataflow.yml --uv
 ```
 
 Two cameras simultaneously:
 
 ```bash
-dora run dataflow_multi.yml
+dora run dataflow_multi.yml --uv
 ```
 
 Set `CAMERA_INDEX` in the dataflow YAML to select a different camera device.

@@ -5,7 +5,7 @@ use crate::{
     id::{DataId, NodeId, OperatorId},
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_with_expand_env::with_expand_envs;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -134,6 +134,8 @@ pub struct Descriptor {
     /// Each node's own `env` map takes precedence on key conflicts, so nodes
     /// can override a global default without repeating shared values like
     /// `RUST_LOG`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or `CUDA_VISIBLE_DEVICES`.
+    /// Values support strings, numbers, booleans, `$VAR` expansion, and
+    /// `{ __dora_env: HOST_VAR }` host-environment lookup.
     ///
     /// ## Example
     ///
@@ -332,7 +334,8 @@ pub struct Node {
     /// [`build`](Self::build) operation and the node execution (i.e. when the node is spawned
     /// through [`path`](Self::path)).
     ///
-    /// Supports strings, numbers, and booleans.
+    /// Supports strings, numbers, booleans, `$VAR` expansion, and
+    /// `{ __dora_env: HOST_VAR }` host-environment lookup.
     ///
     /// ## Example
     ///
@@ -832,7 +835,7 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
 
-    /// CPU cores to pin this node's process to (Linux only, ignored on other platforms).
+    /// CPU cores to pin this node's process to (Linux only, warns and ignores on other platforms).
     ///
     /// ## Example
     ///
@@ -1138,7 +1141,7 @@ pub enum GitRepoRev {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 pub enum EnvValue {
     #[serde(deserialize_with = "with_expand_envs")]
@@ -1149,6 +1152,44 @@ pub enum EnvValue {
     Float(f64),
     #[serde(deserialize_with = "with_expand_envs")]
     String(String),
+    FromHostEnv {
+        #[serde(rename = "__dora_env")]
+        variable: String,
+    },
+}
+
+impl<'de> Deserialize<'de> for EnvValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum EnvValueDef {
+            FromHostEnv {
+                #[serde(rename = "__dora_env")]
+                variable: String,
+            },
+            Bool(#[serde(deserialize_with = "with_expand_envs")] bool),
+            Integer(#[serde(deserialize_with = "with_expand_envs")] i64),
+            Float(#[serde(deserialize_with = "with_expand_envs")] f64),
+            String(#[serde(deserialize_with = "with_expand_envs")] String),
+        }
+
+        match EnvValueDef::deserialize(deserializer)? {
+            EnvValueDef::FromHostEnv { variable } => std::env::var(&variable)
+                .map(EnvValue::String)
+                .map_err(|err| {
+                    de::Error::custom(format!(
+                        "failed to read host environment variable `{variable}` from `__dora_env`: {err}"
+                    ))
+                }),
+            EnvValueDef::Bool(value) => Ok(EnvValue::Bool(value)),
+            EnvValueDef::Integer(value) => Ok(EnvValue::Integer(value)),
+            EnvValueDef::Float(value) => Ok(EnvValue::Float(value)),
+            EnvValueDef::String(value) => Ok(EnvValue::String(value)),
+        }
+    }
 }
 
 impl fmt::Display for EnvValue {
@@ -1158,6 +1199,9 @@ impl fmt::Display for EnvValue {
             EnvValue::Integer(i64) => fmt.write_str(&i64.to_string()),
             EnvValue::Float(f64) => fmt.write_str(&f64.to_string()),
             EnvValue::String(str) => fmt.write_str(str),
+            EnvValue::FromHostEnv { variable } => {
+                fmt.write_str(&std::env::var(variable).unwrap_or_default())
+            }
         }
     }
 }
@@ -1389,6 +1433,52 @@ nodes:
 "#;
         let desc: Descriptor = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(desc.nodes[0].cpu_affinity, None);
+    }
+
+    #[test]
+    fn env_value_reads_from_host_environment() {
+        // SAFETY: This test uses a unique variable name and does not spawn
+        // threads. No other test should read or write this key.
+        unsafe { std::env::set_var("DORA_TEST_DESCRIPTOR_ENV_VALUE", "resolved-from-host-env") };
+        let yaml = r#"
+nodes:
+  - id: test
+    path: test.py
+    env:
+      FROM_HOST:
+        __dora_env: DORA_TEST_DESCRIPTOR_ENV_VALUE
+"#;
+
+        let desc: Descriptor = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(
+            desc.nodes[0].env.as_ref().unwrap().get("FROM_HOST"),
+            Some(&EnvValue::String("resolved-from-host-env".to_string()))
+        );
+        // SAFETY: See the set_var safety note above.
+        unsafe { std::env::remove_var("DORA_TEST_DESCRIPTOR_ENV_VALUE") };
+    }
+
+    #[test]
+    fn env_value_missing_host_environment_errors() {
+        // SAFETY: This test uses a unique variable name and does not spawn
+        // threads. No other test should read or write this key.
+        unsafe { std::env::remove_var("DORA_TEST_DESCRIPTOR_ENV_VALUE_MISSING") };
+        let yaml = r#"
+nodes:
+  - id: test
+    path: test.py
+    env:
+      FROM_HOST:
+        __dora_env: DORA_TEST_DESCRIPTOR_ENV_VALUE_MISSING
+"#;
+
+        let err = serde_yaml::from_str::<Descriptor>(yaml).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("__dora_env") && msg.contains("DORA_TEST_DESCRIPTOR_ENV_VALUE_MISSING"),
+            "error should name the failed __dora_env lookup, got: {msg}"
+        );
     }
 
     #[test]

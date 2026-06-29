@@ -31,6 +31,27 @@ pub struct Upgrade {
     config: PathBuf,
 }
 
+fn scp_args(local_binary: &str, target: &str, port: Option<u16>) -> Vec<String> {
+    let mut args = vec![
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ConnectTimeout=10".to_string(),
+    ];
+    if let Some(p) = port {
+        // scp uses `-P` (capital) for the port; `-p` means "preserve mtimes"
+        args.push("-P".to_string());
+        args.push(p.to_string());
+    }
+    args.push(local_binary.to_string());
+    args.push(format!("{target}:/usr/local/bin/dora"));
+    args
+}
+
+fn restart_service_command(service_name: &str) -> String {
+    format!("sudo systemctl restart {service_name}")
+}
+
 impl Executable for Upgrade {
     fn execute(self) -> eyre::Result<()> {
         default_tracing()?;
@@ -53,12 +74,7 @@ impl Executable for Upgrade {
                 .to_str()
                 .ok_or_else(|| eyre::eyre!("local binary path is not valid UTF-8"))?;
             let mut scp = std::process::Command::new("scp");
-            scp.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]);
-            if let Some(p) = machine.port {
-                // scp uses `-P` (capital) for the port; `-p` means "preserve mtimes"
-                scp.args(["-P", &p.to_string()]);
-            }
-            scp.args([local_binary_str, &format!("{target}:/usr/local/bin/dora")]);
+            scp.args(scp_args(local_binary_str, &target, machine.port));
             let scp_status = scp.status();
 
             match scp_status {
@@ -78,7 +94,7 @@ impl Executable for Upgrade {
             }
 
             // 2. Restart systemd service
-            let restart_cmd = format!("sudo systemctl restart {service_name}");
+            let restart_cmd = restart_service_command(&service_name);
             match run_ssh(&target, machine.port, &restart_cmd) {
                 Ok(true) => {}
                 _ => {
@@ -131,5 +147,54 @@ impl Executable for Upgrade {
                 config.machines.len()
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scp_args_use_capital_port_option_for_custom_ssh_port() {
+        let args = scp_args("/usr/bin/dora", "robot@10.0.0.2", Some(2222));
+
+        assert_eq!(
+            args,
+            vec![
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                "-P",
+                "2222",
+                "/usr/bin/dora",
+                "robot@10.0.0.2:/usr/local/bin/dora",
+            ]
+        );
+    }
+
+    #[test]
+    fn scp_args_omit_port_when_using_ssh_default() {
+        let args = scp_args("/usr/bin/dora", "10.0.0.2", None);
+
+        assert_eq!(
+            args,
+            vec![
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                "/usr/bin/dora",
+                "10.0.0.2:/usr/local/bin/dora",
+            ]
+        );
+    }
+
+    #[test]
+    fn restart_service_command_targets_machine_service() {
+        assert_eq!(
+            restart_service_command("dora-daemon-arm"),
+            "sudo systemctl restart dora-daemon-arm"
+        );
     }
 }

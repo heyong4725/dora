@@ -630,7 +630,7 @@ log_skip "error-propagation" "deliberate node failure demo (success == nonzero e
 log_skip "python-parquet-recorder" "webcam + opencv"
 log_skip "python-yolo-detection" "webcam + YOLO + torch"
 log_skip "mavlink2-bridge-sitl-mission" "external ArduPilot SITL on udp:14550"
-log_skip "ros2-comparison" "ROS2 rclpy comparison (and dataflow.yml node paths are stale, see #issue)"
+log_skip "ros2-comparison" "ROS2 rclpy comparison"
 
 # ---------------------------------------------------------------------------
 # Summary

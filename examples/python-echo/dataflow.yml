@@ -1,6 +1,7 @@
 nodes:
   - id: sender
     path: sender.py
+    build: pip install pyarrow
     inputs:
       tick: dora/timer/millis/500
     outputs:
@@ -8,6 +9,7 @@ nodes:
 
   - id: echo
     path: echo.py
+    build: pip install pyarrow
     inputs:
       data: sender/data
     outputs:
@@ -15,5 +17,6 @@ nodes:
 
   - id: checker
     path: checker.py
+    build: pip install pyarrow
     inputs:
       data: echo/data

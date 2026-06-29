@@ -144,6 +144,68 @@ fn dora(fixture: &Fixture) -> Command {
 }
 
 #[test]
+fn hub_install_explains_per_dataflow_model() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = Command::new(dora_bin())
+        .current_dir(tmp.path())
+        .args(["hub", "install", "test/hub-smoke-hello"])
+        .output()
+        .unwrap();
+
+    assert!(
+        !out.status.success(),
+        "hub install must be a deliberate error stub"
+    );
+    let stderr = stderr(&out);
+    assert!(
+        stderr.contains("does not exist")
+            && stderr.contains("per-dataflow")
+            && stderr.contains("dora build dataflow.yml"),
+        "expected per-dataflow model guidance, got: {stderr}"
+    );
+}
+
+#[test]
+fn hub_init_writes_valid_manifest_from_rust_project() {
+    let tmp = tempfile::tempdir().unwrap();
+    let node = tmp.path().join("rust-node");
+    write(
+        &node.join("Cargo.toml"),
+        "[package]\nname = \"hub-smoke-init\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
+         description = \"generated manifest test\"\n\
+         \n[[bin]]\nname = \"hub-smoke-init-bin\"\npath = \"src/main.rs\"\n\n[workspace]\n",
+    );
+    write(&node.join("src/main.rs"), "fn main() {}\n");
+
+    let out = Command::new(dora_bin())
+        .current_dir(tmp.path())
+        .args(["hub", "init", node.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "hub init failed: {}", stderr(&out));
+
+    let manifest = node.join("dora-node.yml");
+    let written = std::fs::read_to_string(&manifest).unwrap();
+    assert!(
+        written.contains("name: \"hub-smoke-init\"")
+            && written.contains("runtime: rust")
+            && written.contains("entrypoint: \"target/release/hub-smoke-init-bin\""),
+        "unexpected generated manifest:\n{written}"
+    );
+
+    let out = Command::new(dora_bin())
+        .current_dir(tmp.path())
+        .args(["validate", "--node-manifest", manifest.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "generated manifest did not validate: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn hub_end_to_end() {
     // Skip cleanly where git isn't available rather than hard-failing.
     if Command::new("git").arg("--version").output().is_err() {

@@ -12,6 +12,7 @@
 nodes:
   - id: prompt-source
     path: prompt_source.py
+    build: pip install pyarrow
     inputs:
       tick: dora/timer/hz/0.5
     outputs:
@@ -19,6 +20,7 @@ nodes:
 
   - id: generator
     path: generator.py
+    build: pip install pyarrow
     inputs:
       prompt: prompt-source/prompt
     outputs:
@@ -26,5 +28,6 @@ nodes:
 
   - id: sink
     path: sink.py
+    build: pip install pyarrow
     inputs:
       tokens: generator/tokens

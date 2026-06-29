@@ -312,7 +312,7 @@ Values: `raw` (default) or `arrow-ipc`.
 
 ### CPU Affinity
 
-Pin a node's process to specific CPU cores (Linux only, ignored on other platforms):
+Pin a node's process to specific CPU cores (Linux only; other platforms warn and ignore this setting):
 
 ```yaml
 - id: realtime-controller

@@ -58,21 +58,26 @@ anywhere in CI (parse/help don't execute the command's logic).
 | `topic.rs` | `topic` | **help** + parse (list/hz/echo/pub) | **e2e** (`topic-and-top-smoke`: list/info/echo/hz/pub) | no |
 | `inspect/` | `inspect`/`top` | **help** + parse (`inspect top`) | **e2e** (`topic-and-top-smoke`: `top --once`, `inspect top --once`) | no |
 | `self_.rs` | `self` | **help** (ci loop only) | **e2e** (`topic-and-top-smoke`: `self update --check-only`) | no |
-| `cluster/` | `cluster` | parse (up/status/down) | **e2e** (`cluster-smoke`: status/down; `cluster-e2e`: up via SSH) | no (see subcommand notes) |
+| `hub/` | `hub` | parse | **e2e** (`hub-smoke`: search/info/list/fetch/install-stub/publish/yank/outdated/update) | no |
+| `cluster/` | `cluster` | parse (up/status/down/restart) | **e2e** (`cluster-smoke`: status/down; `cluster-e2e`: up via SSH; `ws-cli-e2e`: restart request/reply) | no (see subcommand notes) |
 | `coordinator.rs` | `coordinator` (hidden) | — | **e2e** (`redb`, `daemon-reconnect`, `state-reconstruction`) | no |
 | `daemon.rs` | `daemon` (hidden) | — | **e2e** (`redb`, `daemon-reconnect`, `state-reconstruction`; also via `dora up`) | no |
 | `runtime.rs` | `runtime` (hidden) | — | **e2e** (indirect: `examples` python-operator runtime nodes) | no (indirect only) |
 | `node_binary.rs` | *(helper, not a command)* | — | **e2e** (indirect: `record-replay` resolves record/replay node binaries) | no (indirect only) |
-| `system/` | `status`/`check`, `system` | **help** + parse (`status`) | **help** + parse (`status`) | **YES** — never executed |
-| `clean.rs` | `clean` | parse only (not in `--help` loop) | parse | **YES** — never executed |
+| `system/` | `status`/`check`, `system status` | **e2e** (`ws-cli-e2e`: status JSON, missing coordinator/daemon, `system status` parity) | **help** + parse (`status`) | no |
+| `clean.rs` | `clean` | **e2e** (`ws-cli-e2e`: table, JSON, quiet, persisted-store error) | parse | no |
 
 ## Subcommand-level notes
 
 Some modules with directory granularity have uneven subcommand coverage:
 
 - **`cluster/`** — Behaviorally covered: `up` (`cluster-e2e`, SSH path),
-  `status` + `down` (`cluster-smoke`). **No coverage** for `install`,
-  `uninstall`, `upgrade`, `restart`, `config` (parse-only at best).
+  `status` + `down` (`cluster-smoke`), and `restart` (`ws-cli-e2e`
+  subprocess verifies `RestartByName` request and restarted reply handling).
+  Unit coverage also checks local remote-command construction for `up`,
+  `install`, `uninstall`, and `upgrade`, including systemd unit content and
+  SCP port arguments. Full `install`/`uninstall`/`upgrade` execution still
+  requires external SSH/systemd targets.
 - **`node/`** — Fully covered by `node-lifecycle-e2e` (`add`, `connect`,
   `disconnect`, `info`, `list`, `remove`, `restart`, `stop`) in the ci.yml
   `e2e` job (Rust + C++) and `contract-tests` (Python). `ws-cli-e2e` also
@@ -82,6 +87,10 @@ Some modules with directory granularity have uneven subcommand coverage:
 - **`topic/`** — `list`/`info`/`echo`/`hz`/`pub` covered in
   `topic-and-top-smoke`. `selector.rs` is internal plumbing (no direct
   command).
+- **`hub/`** — `search`, `info`, `list`, `fetch`, the deliberate `install`
+  error stub, `publish`, `yank`/`--undo`, `outdated`, and `update` are covered
+  by the nightly `hub-smoke` suite using a hermetic local index and source
+  repository.
 - **`build/`** — submodules `distributed`/`git`/`local`/`lockfile` are
   exercised transitively: `git` via `examples` (`rust-dataflow-git`),
   `local`/`lockfile` via every `dora build`/`dora run`, `distributed` via
@@ -92,22 +101,13 @@ Some modules with directory granularity have uneven subcommand coverage:
 
 ## Behavioral gaps (no CI ever runs the command)
 
-These modules have **only** parse/help coverage — their runtime logic is
-never executed in CI:
-
-1. **`clean.rs`** (`dora clean`) — parse test only
-   ([`mod.rs` `parse_clean`](../binaries/cli/src/command/mod.rs)); not even in
-   the `--help` smoke loop. Removing finished/failed dataflows from the
-   coordinator is untested end-to-end.
-2. **`system/`** (`dora status`, `dora system status`) — `status` gets
-   `--help` + parse; the actual health-probe output is never asserted. The
-   `dora system` parent and `dora system status` subcommand have no behavioral
-   coverage. (Note: nightly `doctor` overlaps the health-probe surface, but
-   `status` itself is never run.)
+No top-level command module currently has only parse/help coverage at the CI
+tier. The previous gaps for `clean.rs` and `system/` are covered by
+`tests/ws-cli-e2e.rs::clean_status_cli::*`.
 
 Lower-confidence / indirect-only:
 
-3. **`runtime.rs`** and **`node_binary.rs`** are only reached transitively
+1. **`runtime.rs`** and **`node_binary.rs`** are only reached transitively
    (operator runtime nodes; record/replay node-binary resolution). No test
    targets them directly, so a regression isolated to these would only surface
    if the dependent example/job also breaks.

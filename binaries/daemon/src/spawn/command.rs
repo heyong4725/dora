@@ -10,7 +10,7 @@ use dora_core::{
 use dora_download::download_file;
 use dora_message::common::LogLevel;
 use eyre::WrapErr;
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn path_spawn_command(
@@ -108,25 +108,7 @@ pub(super) async fn path_spawn_command(
                     .await
                     .wrap_err("failed to download custom node")?
             } else {
-                let source = shellexpand::env_with_context_no_errors(source, |var| {
-                    // Only expand a controlled allowlist of safe variables
-                    const ALLOWED_VARS: &[&str] = &[
-                        "HOME",
-                        "USER",
-                        "DORA_WORKSPACE",
-                        "CARGO_MANIFEST_DIR",
-                        "PWD",
-                    ];
-                    if ALLOWED_VARS.contains(&var) {
-                        std::env::var(var).ok()
-                    } else {
-                        tracing::warn!(
-                            "skipping env expansion for '${var}' in node path \
-                             (only HOME, USER, DORA_WORKSPACE, CARGO_MANIFEST_DIR, PWD are allowed)"
-                        );
-                        None
-                    }
-                });
+                let source = expand_unconfined_node_path(source);
                 resolve_path(source.as_ref(), working_dir)
                     .wrap_err_with(|| format!("failed to resolve node source `{source}`"))?
             };
@@ -219,8 +201,32 @@ pub(super) async fn path_spawn_command(
     Ok(Some(cmd))
 }
 
+fn expand_unconfined_node_path(source: &str) -> Cow<'_, str> {
+    shellexpand::env_with_context_no_errors(source, |var| {
+        // Only expand a controlled allowlist of safe variables.
+        const ALLOWED_VARS: &[&str] = &[
+            "HOME",
+            "USER",
+            "DORA_WORKSPACE",
+            "CARGO_MANIFEST_DIR",
+            "PWD",
+        ];
+        if ALLOWED_VARS.contains(&var) {
+            std::env::var(var).ok()
+        } else {
+            tracing::warn!(
+                "skipping env expansion for '${var}' in node path \
+                 (only HOME, USER, DORA_WORKSPACE, CARGO_MANIFEST_DIR, PWD are allowed)"
+            );
+            None
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use super::expand_unconfined_node_path;
+
     #[test]
     fn shlex_splits_quoted_args() {
         let input = "--foo 'hello world' --bar";
@@ -232,5 +238,22 @@ mod tests {
     fn shlex_rejects_unmatched_quote() {
         let input = "--foo 'unclosed";
         assert!(shlex::split(input).is_none());
+    }
+
+    #[test]
+    fn unconfined_path_expands_allowed_environment_variable() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo should set CARGO_MANIFEST_DIR");
+
+        let expanded = expand_unconfined_node_path("${CARGO_MANIFEST_DIR}/Cargo.toml");
+
+        assert_eq!(expanded.as_ref(), format!("{manifest_dir}/Cargo.toml"));
+    }
+
+    #[test]
+    fn unconfined_path_leaves_denied_environment_variable_literal() {
+        let expanded = expand_unconfined_node_path("${DORA_AUTH_TOKEN}/node");
+
+        assert_eq!(expanded.as_ref(), "${DORA_AUTH_TOKEN}/node");
     }
 }

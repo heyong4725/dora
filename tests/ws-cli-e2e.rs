@@ -283,6 +283,111 @@ fn start_mock_topic_server(subscription_id: Uuid, payload: Vec<u8>) -> u16 {
     port
 }
 
+/// Start a minimal control websocket server that captures a cluster restart
+/// request and replies as if the coordinator restarted the dataflow.
+fn start_mock_cluster_restart_server(
+    old_uuid: Uuid,
+    new_uuid: Uuid,
+) -> (u16, std::sync::mpsc::Receiver<ControlRequest>) {
+    async fn handle_mock_restart_ws<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+        socket: tokio_tungstenite::WebSocketStream<S>,
+        old_uuid: Uuid,
+        new_uuid: Uuid,
+        request_tx: std::sync::mpsc::Sender<ControlRequest>,
+    ) {
+        use tokio_tungstenite::tungstenite::Message;
+
+        let (mut ws_tx, mut ws_rx) = socket.split();
+        while let Some(message) = ws_rx.next().await {
+            let Ok(Message::Text(text)) = message else {
+                continue;
+            };
+            let request: WsRequest = serde_json::from_str(&text).expect("parse WsRequest");
+            let control_request: ControlRequest =
+                serde_json::from_value(request.params).expect("parse control request");
+            match control_request {
+                ControlRequest::Hello { .. } => {
+                    let reply = ControlRequestReply::HelloOk {
+                        dora_version: current_crate_version(),
+                    };
+                    let response = serde_json::json!({
+                        "id": request.id,
+                        "result": reply,
+                    });
+                    ws_tx
+                        .send(Message::Text(response.to_string().into()))
+                        .await
+                        .expect("send hello reply");
+                }
+                ControlRequest::RestartByName {
+                    name,
+                    grace_duration,
+                    force,
+                } => {
+                    request_tx
+                        .send(ControlRequest::RestartByName {
+                            name,
+                            grace_duration,
+                            force,
+                        })
+                        .expect("capture restart request");
+                    let reply = ControlRequestReply::DataflowRestarted { old_uuid, new_uuid };
+                    let response = serde_json::json!({
+                        "id": request.id,
+                        "result": reply,
+                    });
+                    ws_tx
+                        .send(Message::Text(response.to_string().into()))
+                        .await
+                        .expect("send restart reply");
+                    break;
+                }
+                other => panic!("unexpected control request: {other:?}"),
+            }
+        }
+    }
+
+    let (port_tx, port_rx) = std::sync::mpsc::channel();
+    let (request_tx, request_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create mock restart runtime");
+
+        rt.block_on(async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind mock restart server");
+            let port = listener.local_addr().expect("mock local addr").port();
+            port_tx.send(port).expect("send mock server port");
+            loop {
+                let (stream, _) = listener.accept().await.expect("accept mock restart client");
+                let request_tx = request_tx.clone();
+                tokio::spawn(async move {
+                    let Ok(ws_stream) = accept_async(stream).await else {
+                        return;
+                    };
+                    handle_mock_restart_ws(ws_stream, old_uuid, new_uuid, request_tx).await;
+                });
+            }
+        });
+    });
+
+    let port = port_rx.recv().expect("receive mock restart port");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("mock restart server did not become ready within 2s");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    (port, request_rx)
+}
+
 /// Helper: send a ControlRequest via WsSession and deserialize the reply.
 fn send_request(session: &WsSession, req: &ControlRequest) -> eyre::Result<ControlRequestReply> {
     let data = serde_json::to_vec(req)?;
@@ -431,6 +536,394 @@ fn cli_status_no_daemon() {
             assert!(!connected, "no daemons should be connected");
         }
         other => panic!("expected DaemonConnected, got {other:?}"),
+    }
+}
+
+mod clean_status_cli {
+    use super::{
+        FailingListStore, seed_dataflow_record, start_coordinator_background,
+        start_coordinator_background_with_store, start_mock_cluster_restart_server,
+    };
+    use dora_coordinator::{CoordinatorStore, InMemoryStore};
+    use dora_message::cli_to_coordinator::ControlRequest;
+    use std::net::TcpListener;
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+    use std::sync::{Arc, Once};
+
+    static BUILD_CLI: Once = Once::new();
+
+    fn dora_bin() -> String {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let target_root = std::env::var("CARGO_TARGET_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| Path::new(manifest).join("target"));
+        let exe_name = format!("dora{}", std::env::consts::EXE_SUFFIX);
+        let candidate = target_root.join("debug").join(&exe_name);
+        if candidate.exists() {
+            return candidate.to_string_lossy().to_string();
+        }
+        panic!(
+            "dora binary not found at {} after ensure_cli_built(); \
+             if you use .cargo/config.toml or CARGO_BUILD_TARGET, ensure \
+             CARGO_TARGET_DIR points at the resolved artifact directory",
+            candidate.display()
+        );
+    }
+
+    fn ensure_cli_built() {
+        BUILD_CLI.call_once(|| {
+            let status = Command::new("cargo")
+                .args(["build", "-p", "dora-cli"])
+                .status()
+                .expect("failed to build dora-cli");
+            assert!(status.success(), "failed to build dora-cli");
+        });
+    }
+
+    fn run_dora(
+        dora: &str,
+        port: u16,
+        args: &[&str],
+    ) -> (std::process::ExitStatus, String, String) {
+        let mut cmd = Command::new(dora);
+        cmd.args(args);
+        cmd.arg("--coordinator-port").arg(port.to_string());
+        let out = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("failed to spawn dora");
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status, stdout, stderr)
+    }
+
+    fn unused_port() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind random local port");
+        listener.local_addr().expect("read local addr").port()
+    }
+
+    #[test]
+    fn cli_clean_subprocess_reaps_finished_dataflow() {
+        ensure_cli_built();
+        let dora = dora_bin();
+
+        let store_impl = Arc::new(InMemoryStore::new());
+        let dataflow_id = uuid::Uuid::new_v4();
+        seed_dataflow_record(store_impl.as_ref(), dataflow_id, &["sensor"]);
+        let store: Arc<dyn CoordinatorStore> = store_impl.clone();
+        let port = start_coordinator_background_with_store(store);
+
+        let (status, stdout, stderr) = run_dora(&dora, port, &["clean"]);
+        assert!(
+            status.success(),
+            "dora clean failed: status={status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&dataflow_id.to_string()) && stdout.contains("Finished"),
+            "default table output should include cleaned UUID and status.\nstdout:\n{stdout}"
+        );
+        assert!(
+            stderr.contains("Cleaned 1 dataflow"),
+            "stderr should include cleanup summary.\nstderr:\n{stderr}"
+        );
+        let surviving = store_impl
+            .get_dataflow(&dataflow_id)
+            .expect("get_dataflow after subprocess clean");
+        assert!(
+            surviving.is_none(),
+            "dora clean should delete persisted record, got {surviving:?}"
+        );
+    }
+
+    #[test]
+    fn cli_clean_subprocess_json_and_quiet_outputs_are_parseable() {
+        ensure_cli_built();
+        let dora = dora_bin();
+
+        let json_store_impl = Arc::new(InMemoryStore::new());
+        let json_id = uuid::Uuid::new_v4();
+        seed_dataflow_record(json_store_impl.as_ref(), json_id, &["sensor"]);
+        let json_store: Arc<dyn CoordinatorStore> = json_store_impl.clone();
+        let json_port = start_coordinator_background_with_store(json_store);
+
+        let (status, stdout, stderr) = run_dora(&dora, json_port, &["clean", "--format", "json"]);
+        assert!(
+            status.success(),
+            "dora clean --format json failed: status={status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(stdout.trim()).expect("clean json output is valid JSON");
+        assert_eq!(parsed["uuid"], json_id.to_string());
+        assert_eq!(parsed["status"], "Finished");
+
+        let quiet_store_impl = Arc::new(InMemoryStore::new());
+        let quiet_id = uuid::Uuid::new_v4();
+        seed_dataflow_record(quiet_store_impl.as_ref(), quiet_id, &["sensor"]);
+        let quiet_store: Arc<dyn CoordinatorStore> = quiet_store_impl;
+        let quiet_port = start_coordinator_background_with_store(quiet_store);
+
+        let (status, stdout, stderr) = run_dora(&dora, quiet_port, &["clean", "--quiet"]);
+        assert!(
+            status.success(),
+            "dora clean --quiet failed: status={status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert_eq!(
+            stdout.trim(),
+            quiet_id.to_string(),
+            "quiet output should contain only the cleaned UUID"
+        );
+        assert!(
+            stderr.trim().is_empty(),
+            "quiet successful cleanup should not emit stderr, got:\n{stderr}"
+        );
+    }
+
+    #[test]
+    fn cli_clean_subprocess_reports_persisted_enumeration_failure() {
+        ensure_cli_built();
+        let dora = dora_bin();
+
+        let store_impl = Arc::new(FailingListStore::new());
+        let store: Arc<dyn CoordinatorStore> = store_impl.clone();
+        let port = start_coordinator_background_with_store(store);
+        store_impl.enable_failure();
+
+        let (status, stdout, stderr) = run_dora(&dora, port, &["clean"]);
+        assert!(
+            !status.success(),
+            "dora clean should fail when persisted enumeration fails.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            stdout.trim().is_empty(),
+            "failed clean should keep stdout parseable/empty, got:\n{stdout}"
+        );
+        assert!(
+            stderr.contains("failed to enumerate persisted dataflows")
+                && stderr.contains("No state was modified"),
+            "stderr should surface the coordinator cleanup error, got:\n{stderr}"
+        );
+    }
+
+    #[test]
+    fn cli_status_json_reports_missing_daemon_with_nonzero_exit() {
+        ensure_cli_built();
+        let dora = dora_bin();
+        let port = start_coordinator_background();
+
+        let (status, stdout, stderr) = run_dora(&dora, port, &["status", "--format", "json"]);
+        assert!(
+            !status.success(),
+            "status should fail when no daemon is connected.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(&stdout).expect("status JSON output is valid JSON");
+        assert_eq!(parsed["coordinator"]["status"], "running");
+        assert_eq!(parsed["daemon"]["status"], "not running");
+        assert_eq!(parsed["active_dataflows"], 0);
+        assert!(
+            stderr.contains("System check failed"),
+            "stderr should report failed system check, got:\n{stderr}"
+        );
+    }
+
+    #[test]
+    fn cli_system_status_matches_top_level_status() {
+        ensure_cli_built();
+        let dora = dora_bin();
+        let port = start_coordinator_background();
+
+        let (top_status, top_stdout, top_stderr) =
+            run_dora(&dora, port, &["status", "--format", "json"]);
+        assert!(
+            !top_status.success(),
+            "top-level status should fail without daemon.\nstdout:\n{top_stdout}\nstderr:\n{top_stderr}"
+        );
+        let (system_status, system_stdout, system_stderr) =
+            run_dora(&dora, port, &["system", "status", "--format", "json"]);
+        assert!(
+            !system_status.success(),
+            "system status should fail without daemon.\nstdout:\n{system_stdout}\nstderr:\n{system_stderr}"
+        );
+
+        let top_json: serde_json::Value =
+            serde_json::from_str(&top_stdout).expect("top-level status JSON is valid");
+        let system_json: serde_json::Value =
+            serde_json::from_str(&system_stdout).expect("system status JSON is valid");
+        assert_eq!(system_json, top_json);
+    }
+
+    #[test]
+    fn cli_status_json_reports_missing_coordinator() {
+        ensure_cli_built();
+        let dora = dora_bin();
+        let port = unused_port();
+
+        let (status, stdout, stderr) = run_dora(&dora, port, &["status", "--format", "json"]);
+        assert!(
+            !status.success(),
+            "status should fail when coordinator is unavailable.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(&stdout).expect("status JSON output is valid JSON");
+        assert_eq!(parsed["coordinator"]["status"], "not running");
+        assert_eq!(parsed["daemon"]["status"], "unknown");
+        assert!(parsed["active_dataflows"].is_null());
+        assert!(
+            stderr.contains("System check failed"),
+            "stderr should report failed system check, got:\n{stderr}"
+        );
+    }
+
+    #[test]
+    fn cli_restart_sends_restart_by_name_request() {
+        ensure_cli_built();
+        let dora = dora_bin();
+        let old_uuid = uuid::Uuid::new_v4();
+        let new_uuid = uuid::Uuid::new_v4();
+        let (port, request_rx) = start_mock_cluster_restart_server(old_uuid, new_uuid);
+
+        let (status, stdout, stderr) = run_dora(
+            &dora,
+            port,
+            &[
+                "restart",
+                "--name",
+                "vision-pipeline",
+                "--grace-duration",
+                "2s",
+            ],
+        );
+        assert!(
+            status.success(),
+            "dora restart failed: status={status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("dataflow restarted: {old_uuid} -> {new_uuid}")),
+            "stdout should include coordinator restart reply, got:\n{stdout}"
+        );
+        assert!(
+            stderr.trim().is_empty(),
+            "restart should not emit stderr on success, got:\n{stderr}"
+        );
+
+        let request = request_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("mock coordinator should receive restart request");
+        match request {
+            ControlRequest::RestartByName {
+                name,
+                grace_duration,
+                force,
+            } => {
+                assert_eq!(name, "vision-pipeline");
+                assert_eq!(grace_duration, Some(std::time::Duration::from_secs(2)));
+                assert!(!force);
+            }
+            other => panic!("expected RestartByName request, got {other:?}"),
+        }
+
+        let old_uuid = uuid::Uuid::new_v4();
+        let new_uuid = uuid::Uuid::new_v4();
+        let (port, request_rx) = start_mock_cluster_restart_server(old_uuid, new_uuid);
+
+        let (status, stdout, stderr) = run_dora(
+            &dora,
+            port,
+            &["restart", "--name", "vision-pipeline", "--force"],
+        );
+        assert!(
+            status.success(),
+            "dora restart --force failed: status={status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("dataflow restarted: {old_uuid} -> {new_uuid}")),
+            "stdout should include coordinator restart reply, got:\n{stdout}"
+        );
+        assert!(
+            stderr.trim().is_empty(),
+            "restart --force should not emit stderr on success, got:\n{stderr}"
+        );
+
+        let request = request_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("mock coordinator should receive restart --force request");
+        match request {
+            ControlRequest::RestartByName {
+                name,
+                grace_duration,
+                force,
+            } => {
+                assert_eq!(name, "vision-pipeline");
+                assert_eq!(grace_duration, None);
+                assert!(force);
+            }
+            other => panic!("expected RestartByName request, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cli_cluster_restart_sends_restart_by_name_request() {
+        ensure_cli_built();
+        let dora = dora_bin();
+        let old_uuid = uuid::Uuid::new_v4();
+        let new_uuid = uuid::Uuid::new_v4();
+        let (port, request_rx) = start_mock_cluster_restart_server(old_uuid, new_uuid);
+
+        let dir = tempfile::tempdir().expect("create cluster restart tempdir");
+        let config = dir.path().join("cluster.yml");
+        std::fs::write(
+            &config,
+            format!(
+                "coordinator:\n  addr: 127.0.0.1\n  port: {port}\nmachines:\n  - id: local\n    host: 127.0.0.1\n"
+            ),
+        )
+        .expect("write cluster config");
+
+        let out = Command::new(&dora)
+            .args([
+                "cluster",
+                "restart",
+                config.to_str().expect("cluster config path is utf8"),
+                "vision-pipeline",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("failed to spawn dora cluster restart");
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(
+            out.status.success(),
+            "dora cluster restart failed: status={:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            out.status.code()
+        );
+        assert!(
+            stdout.contains("Restarting dataflow `vision-pipeline`")
+                && stdout.contains(&format!("dataflow restarted: {old_uuid} -> {new_uuid}")),
+            "stdout should include restart request and coordinator reply, got:\n{stdout}"
+        );
+        assert!(
+            stderr.trim().is_empty(),
+            "cluster restart should not emit stderr on success, got:\n{stderr}"
+        );
+
+        let request = request_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("mock coordinator should receive restart request");
+        match request {
+            ControlRequest::RestartByName {
+                name,
+                grace_duration,
+                force,
+            } => {
+                assert_eq!(name, "vision-pipeline");
+                assert_eq!(grace_duration, None);
+                assert!(!force);
+            }
+            other => panic!("expected RestartByName request, got {other:?}"),
+        }
     }
 }
 
@@ -1200,11 +1693,13 @@ mod real_dataflow {
         );
 
         // Stop all
-        let _ = Command::new(&dora)
+        let stop_status = Command::new(&dora)
             .args(["stop", "--all"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status()
+            .unwrap();
+        assert!(stop_status.success(), "dora stop --all failed");
 
         cleanup(&dora);
     }

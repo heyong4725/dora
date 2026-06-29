@@ -4,7 +4,7 @@
 # Prerequisites:
 #   - dora CLI installed
 #   - Python dora package: pip install dora-rs
-#   - numpy and pyarrow: pip install numpy pyarrow
+#   - pyarrow for manual Dora environments (`dora run --uv` installs it)
 #   - ROS2 (Humble+) with rclpy and std_msgs
 #
 # Usage:

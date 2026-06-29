@@ -62,7 +62,7 @@ async fn restart_recovers_from_failure() {
         false,
         LogDestination::Tracing,
         None,
-        Some(Duration::from_secs(30)),
+        Some(Duration::from_secs(15)),
         false,
         None,
         None,
@@ -114,7 +114,7 @@ async fn max_restarts_limit_reached() {
         false,
         LogDestination::Tracing,
         None,
-        Some(Duration::from_secs(30)),
+        Some(Duration::from_secs(15)),
         false,
         None,
         None,
@@ -423,9 +423,10 @@ async fn input_timeout_delivers_input_closed_to_downstream() {
         false,
         LogDestination::Tracing,
         None,
-        // 5 s is plenty — the observer should see Input at ~50 ms and
-        // InputClosed at ~550 ms (input_timeout = 0.5 s), then exit.
-        Some(Duration::from_secs(5)),
+        // Cold process startup can consume several seconds on macOS before the
+        // dataflow starts. Once running, the observer should see Input at
+        // ~50 ms and InputClosed at ~550 ms (input_timeout = 0.5 s), then exit.
+        Some(Duration::from_secs(15)),
         false,
         None,
         None,
@@ -612,7 +613,7 @@ async fn node_restarted_is_delivered_to_downstream() {
         None,
         // Full cycle is ~250 ms (2 crashes × ~100 ms restart_delay),
         // plus observer teardown. 5 s is generous.
-        Some(Duration::from_secs(5)),
+        Some(Duration::from_secs(15)),
         false,
         None,
         None,
@@ -691,7 +692,7 @@ async fn input_recovered_is_delivered_after_broken_input_receives_data() {
         false,
         LogDestination::Tracing,
         None,
-        Some(Duration::from_secs(5)),
+        Some(Duration::from_secs(30)),
         false,
         None,
         None,

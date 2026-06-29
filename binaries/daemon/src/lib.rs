@@ -872,8 +872,14 @@ impl Daemon {
             )
         }
 
-        validate::check_dataflow(&descriptor, &working_dir)
-            .wrap_err("Dataflow could not be validated.")?;
+        validate::check_dataflow_with_options(
+            &descriptor,
+            &working_dir,
+            validate::CheckDataflowOptions {
+                skip_python_runtime_check: uv,
+            },
+        )
+        .wrap_err("Dataflow could not be validated.")?;
         let health_check_interval = descriptor
             .health_check_interval
             .map(Duration::from_secs_f64);
@@ -5612,13 +5618,13 @@ mod fault_tolerance_tests {
     }
 
     fn matches_event(event: &NodeEvent, expected: &str) -> bool {
-        match (event, expected) {
-            (NodeEvent::InputClosed { .. }, "InputClosed") => true,
-            (NodeEvent::InputRecovered { .. }, "InputRecovered") => true,
-            (NodeEvent::AllInputsClosed, "AllInputsClosed") => true,
-            (NodeEvent::Input { .. }, "Input") => true,
-            _ => false,
-        }
+        matches!(
+            (event, expected),
+            (NodeEvent::InputClosed { .. }, "InputClosed")
+                | (NodeEvent::InputRecovered { .. }, "InputRecovered")
+                | (NodeEvent::AllInputsClosed, "AllInputsClosed")
+                | (NodeEvent::Input { .. }, "Input")
+        )
     }
 
     // -- Test 1: close_input removes input, sends InputClosed, no AllInputsClosed with remaining inputs --

@@ -69,6 +69,21 @@ fn truncate_log_line(content: &mut String) {
     }
 }
 
+fn cpu_affinity_platform_warning(cores: Option<&[usize]>) -> Option<String> {
+    let cores = cores?;
+    #[cfg(target_os = "linux")]
+    {
+        let _ = cores;
+        None
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Some(format!(
+            "cpu_affinity {cores:?} requested, but CPU affinity is only supported on Linux; ignoring"
+        ))
+    }
+}
+
 #[derive(Clone, Default)]
 struct RestartConfig {
     max_restarts: u32,
@@ -447,6 +462,14 @@ impl PreparedNode {
                         ),
                     )
                     .await;
+
+                if let Some(warning) =
+                    cpu_affinity_platform_warning(self.node.cpu_affinity.as_deref())
+                {
+                    logger
+                        .log(LogLevel::Warn, Some("spawner".into()), warning)
+                        .await;
+                }
 
                 #[cfg(target_os = "linux")]
                 if let Some(ref cores) = self.node.cpu_affinity {
@@ -970,4 +993,25 @@ struct NodeProcessFinished {
     // (dora-rs/adora#152). The receiver is now dropped at the end of
     // the spawn_inner task and each restart creates a fresh channel
     // pair.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cpu_affinity_platform_warning;
+
+    #[test]
+    fn cpu_affinity_platform_warning_matches_current_os() {
+        assert!(cpu_affinity_platform_warning(None).is_none());
+
+        let warning = cpu_affinity_platform_warning(Some(&[0, 1]));
+        #[cfg(target_os = "linux")]
+        assert!(warning.is_none());
+        #[cfg(not(target_os = "linux"))]
+        assert_eq!(
+            warning.as_deref(),
+            Some(
+                "cpu_affinity [0, 1] requested, but CPU affinity is only supported on Linux; ignoring"
+            )
+        );
+    }
 }

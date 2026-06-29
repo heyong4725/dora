@@ -1,6 +1,7 @@
 nodes:
   - id: sender
     path: sender.py
+    build: pip install pyarrow
     outputs:
       - values
     output_types:
@@ -8,6 +9,7 @@ nodes:
 
   - id: async-receiver
     path: receiver.py
+    build: pip install pyarrow
     inputs:
       values: sender/values
     input_types:

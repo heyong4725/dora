@@ -25,6 +25,11 @@ torch_tensor = None
 
 for i in range(MESSAGE_COUNT):
     event = node.next()
+    if event is None or event["type"] == "STOP":
+        break
+    if event["type"] != "INPUT":
+        continue
+
     t_send = event["metadata"]["t_send"]
 
     if i == 0:

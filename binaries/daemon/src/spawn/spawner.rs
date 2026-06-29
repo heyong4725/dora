@@ -58,7 +58,7 @@ fn is_denied_env(key: &str) -> bool {
 /// to child nodes via `/proc/<pid>/environ`.
 fn strip_denied_env(mut command: Command) -> Command {
     for key in ENV_DENYLIST {
-        command = command.env_remove(key);
+        command.environment.insert(OsString::from(key), None);
     }
     command
 }
@@ -485,5 +485,84 @@ impl Spawner {
             last_activity,
             ft_stats: self.ft_stats,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_spawner(zenoh_connect_endpoint: Option<String>) -> Spawner {
+        let (daemon_tx, _daemon_rx) = mpsc::channel(1);
+        let (_shutdown_tx, shutdown) = tokio::sync::watch::channel(false);
+        Spawner {
+            dataflow_id: uuid::Uuid::new_v4(),
+            daemon_tx,
+            dataflow_descriptor: serde_yaml::from_str("nodes: []").unwrap(),
+            clock: Arc::new(HLC::default()),
+            uv: false,
+            ft_stats: Arc::new(crate::FaultToleranceStats::default()),
+            shutdown,
+            zenoh_connect_endpoint,
+        }
+    }
+
+    #[test]
+    fn strip_denied_env_blocks_inheritance_and_explicit_values() {
+        let command = Command::new("node")
+            .env("DORA_AUTH_TOKEN", "secret")
+            .env("SAFE_USER_ENV", "kept");
+
+        let command = strip_denied_env(command);
+
+        assert!(
+            command.inherit_environment,
+            "stripping denied keys should not clear the full parent env"
+        );
+        for key in ENV_DENYLIST {
+            assert_eq!(
+                command.environment.get(&OsString::from(key)),
+                Some(&None),
+                "{key} must be a tombstone so inherited parent values are removed"
+            );
+        }
+        assert_eq!(
+            command.environment.get(&OsString::from("SAFE_USER_ENV")),
+            Some(&Some(OsString::from("kept")))
+        );
+    }
+
+    #[test]
+    fn denied_env_detection_only_rejects_sensitive_keys() {
+        assert!(is_denied_env("DORA_ALLOW_SHELL_NODES"));
+        assert!(is_denied_env("DORA_AUTH_TOKEN"));
+        assert!(!is_denied_env("DORA_USER_SETTING"));
+    }
+
+    #[test]
+    fn zenoh_connect_endpoint_is_injected_when_available() {
+        let spawner = test_spawner(Some("tcp/127.0.0.1:4567".to_string()));
+
+        let command = spawner.maybe_inject_zenoh_connect(Command::new("node"));
+
+        assert_eq!(
+            command
+                .environment
+                .get(&OsString::from(DORA_ZENOH_CONNECT_ENV)),
+            Some(&Some(OsString::from("tcp/127.0.0.1:4567")))
+        );
+    }
+
+    #[test]
+    fn zenoh_connect_endpoint_is_omitted_when_unavailable() {
+        let spawner = test_spawner(None);
+
+        let command = spawner.maybe_inject_zenoh_connect(Command::new("node"));
+
+        assert!(
+            !command
+                .environment
+                .contains_key(&OsString::from(DORA_ZENOH_CONNECT_ENV))
+        );
     }
 }

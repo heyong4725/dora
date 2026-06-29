@@ -1,12 +1,14 @@
 nodes:
   - id: dora-sender
     path: dora_sender.py
+    build: pip install pyarrow
     outputs:
       - latency
       - throughput
 
   - id: dora-receiver
     path: dora_receiver.py
+    build: pip install pyarrow
     inputs:
       latency: dora-sender/latency
       throughput:

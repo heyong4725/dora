@@ -1,6 +1,7 @@
 nodes:
   - id: recorder
     path: recorder.py
+    build: pip install pandas pyarrow
     restart_policy: on-failure
     inputs:
       image: camera/image
@@ -12,6 +13,7 @@ nodes:
 
   - id: camera
     path: camera.py
+    build: pip install opencv-python pyarrow
     restart_policy: on-failure
     inputs:
       tick: dora/timer/millis/50

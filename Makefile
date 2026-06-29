@@ -49,7 +49,7 @@
 .PHONY: qa qa-fast qa-full qa-deep qa-tier1 qa-nightly qa-release-gate qa-mutation-audit \
         qa-examples qa-cluster-e2e qa-cluster-record-replay \
         qa-fmt qa-audit qa-unwrap qa-clippy qa-test qa-coverage qa-mutants qa-semver \
-        qa-adversarial qa-kani qa-pgo qa-install qa-pgo-install qa-kani-install
+        qa-user-story-tracker qa-adversarial qa-kani qa-pgo qa-install qa-pgo-install qa-kani-install
 
 qa: qa-fast
 
@@ -134,6 +134,9 @@ qa-mutants:
 qa-semver:
 	@scripts/qa/semver.sh
 
+qa-user-story-tracker:
+	@python3 scripts/qa/validate-user-story-tracker.py
+
 # Adversarial LLM review of current diff (requires codex or claude CLI)
 qa-adversarial:
 	@scripts/qa/adversarial.sh
@@ -161,7 +164,7 @@ qa-pgo:
 # One-shot tool installation
 
 qa-install:
-	cargo install cargo-audit cargo-deny cargo-llvm-cov cargo-mutants cargo-semver-checks
+	cargo install cargo-audit cargo-deny cargo-llvm-cov cargo-mutants cargo-semver-checks typos-cli
 	rustup component add llvm-tools-preview
 
 qa-pgo-install:

@@ -6,7 +6,7 @@ Reproducible latency and throughput comparison between Dora and ROS2 using ident
 
 - Dora CLI installed (`cargo install --path binaries/cli`)
 - Python Dora package: `pip install dora-rs`
-- `numpy` and `pyarrow`: `pip install numpy pyarrow`
+- PyArrow for manual Dora runs: `pip install pyarrow` (`dora run ... --uv` installs it from the descriptor)
 - ROS2 Humble (or later) with `rclpy` and `std_msgs`
 
 ## Methodology

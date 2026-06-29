@@ -1,0 +1,8 @@
+nodes:
+  - id: runtime-node
+    operator:
+      python: py_operator.py
+      inputs:
+        tick: dora/timer/millis/50
+      outputs:
+        - done

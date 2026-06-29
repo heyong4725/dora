@@ -184,6 +184,60 @@ fn needs_uv(yaml_path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn node_build_command(yaml_path: &str, node_id: &str) -> String {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let full_yaml = Path::new(manifest_dir).join(yaml_path);
+    let raw = std::fs::read_to_string(&full_yaml)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", full_yaml.display()));
+    let doc: serde_yaml::Value = serde_yaml::from_str(&raw)
+        .unwrap_or_else(|err| panic!("failed to parse {}: {err}", full_yaml.display()));
+    let nodes = doc
+        .get("nodes")
+        .and_then(serde_yaml::Value::as_sequence)
+        .unwrap_or_else(|| panic!("{} has no `nodes` sequence", full_yaml.display()));
+    let node = nodes
+        .iter()
+        .find(|node| node.get("id").and_then(serde_yaml::Value::as_str) == Some(node_id))
+        .unwrap_or_else(|| panic!("{} has no node `{node_id}`", full_yaml.display()));
+
+    node.get("build")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_else(|| {
+            panic!(
+                "node `{node_id}` in {} has no `build` command",
+                full_yaml.display()
+            )
+        })
+        .to_string()
+}
+
+fn assert_node_build_installs(yaml_path: &str, node_id: &str, packages: &[&str]) {
+    let build = node_build_command(yaml_path, node_id);
+    for package in packages {
+        assert!(
+            build.split_whitespace().any(|part| part == *package),
+            "node `{node_id}` in {yaml_path} build command `{build}` does not install `{package}`"
+        );
+    }
+}
+
+fn validate_dataflow_descriptor(yaml_path: &str) {
+    ensure_cli_built();
+    let dora = dora_bin();
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let full_yaml = Path::new(manifest_dir).join(yaml_path);
+    let output = Command::new(&dora)
+        .args(["validate", full_yaml.to_str().unwrap()])
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run dora validate for {yaml_path}: {err}"));
+    assert!(
+        output.status.success(),
+        "{yaml_path}: dora validate failed\n---- stdout ----\n{}\n---- stderr ----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
 /// Run an example dataflow through the full WS control plane lifecycle.
 ///
 /// 1. `dora up` -- start coordinator + daemon
@@ -537,6 +591,99 @@ fn smoke_streaming_example() {
     );
 }
 
+#[test]
+fn contract_python_camera_examples_declare_managed_dependencies() {
+    assert_node_build_installs(
+        "examples/python-parquet-recorder/dataflow.yml",
+        "recorder",
+        &["pandas", "pyarrow"],
+    );
+    assert_node_build_installs(
+        "examples/python-parquet-recorder/dataflow.yml",
+        "camera",
+        &["opencv-python", "pyarrow"],
+    );
+
+    for yaml in [
+        "examples/python-yolo-detection/dataflow.yml",
+        "examples/python-yolo-detection/dataflow_multi.yml",
+    ] {
+        for webcam in ["webcam", "webcam_0", "webcam_1"] {
+            if yaml.ends_with("dataflow.yml") && webcam != "webcam" {
+                continue;
+            }
+            if yaml.ends_with("dataflow_multi.yml") && webcam == "webcam" {
+                continue;
+            }
+            assert_node_build_installs(yaml, webcam, &["opencv-python", "pyarrow"]);
+        }
+        for detector in [
+            "object_detection",
+            "object_detection_0",
+            "object_detection_1",
+        ] {
+            if yaml.ends_with("dataflow.yml") && detector != "object_detection" {
+                continue;
+            }
+            if yaml.ends_with("dataflow_multi.yml") && detector == "object_detection" {
+                continue;
+            }
+            assert_node_build_installs(yaml, detector, &["numpy", "pyarrow", "ultralytics"]);
+        }
+        for plot in ["plot", "plot_0", "plot_1"] {
+            if yaml.ends_with("dataflow.yml") && plot != "plot" {
+                continue;
+            }
+            if yaml.ends_with("dataflow_multi.yml") && plot == "plot" {
+                continue;
+            }
+            assert_node_build_installs(yaml, plot, &["opencv-python"]);
+        }
+    }
+}
+
+#[test]
+fn contract_ros2_comparison_declares_managed_dora_dependencies() {
+    assert_node_build_installs(
+        "examples/ros2-comparison/dataflow.yml",
+        "dora-sender",
+        &["pyarrow"],
+    );
+    assert_node_build_installs(
+        "examples/ros2-comparison/dataflow.yml",
+        "dora-receiver",
+        &["pyarrow"],
+    );
+}
+
+#[test]
+fn contract_external_runtime_example_descriptors_validate() {
+    for yaml in [
+        "examples/ros2-bridge/yaml-bridge/dataflow.yml",
+        "examples/ros2-bridge/yaml-bridge-service/dataflow-client.yml",
+        "examples/ros2-bridge/yaml-bridge-service/dataflow-server.yml",
+        "examples/ros2-bridge/yaml-bridge-action/dataflow.yml",
+        "examples/ros2-bridge/yaml-bridge-action-server/dataflow.yml",
+        "examples/mavlink2-bridge-sitl-mission/dataflow.yml",
+        "examples/mavlink2-bridge-sitl-mission/dataflow_long.yml",
+        "examples/mavlink2-bridge-sitl-mission/dataflow_rover.yml",
+        "examples/memory-pool/cpu2cpu.yml",
+        "examples/memory-pool/cpu2cuda.yml",
+        "examples/memory-pool/cuda2cpu.yml",
+        "examples/memory-pool/auto_cleanup.yml",
+        "examples/memory-pool/duplicate_free.yml",
+        "examples/memory-pool/read_after_free.yml",
+        "examples/memory-pool/write_after_free.yml",
+        "examples/cuda-benchmark/cpu_bench.yml",
+        "examples/cuda-benchmark/cuda_bench.yml",
+        "examples/cuda-benchmark/demo_bench.yml",
+        "examples/c++-arrow-dataflow/dataflow.yml",
+        "examples/cmake-dataflow/dataflow.yml",
+    ] {
+        validate_dataflow_descriptor(yaml);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Local-mode tests (dora run --stop-after)
 //
@@ -646,6 +793,15 @@ fn smoke_local_python_concurrent_rw() {
         "local-python-concurrent-rw",
         "examples/python-concurrent-rw/dataflow.yml",
         15,
+    );
+}
+
+#[test]
+fn smoke_local_python_operator_minimal() {
+    run_smoke_test_local(
+        "local-python-operator-minimal",
+        "tests/python-operator-smoke/dataflow.yml",
+        20,
     );
 }
 
@@ -1886,16 +2042,28 @@ fn smoke_shell_node_blocked_without_flag() {
 // ---------------------------------------------------------------------------
 // Memory-pool CPU transport (#2168)
 //
-// Requires `torch` and `tqdm` — not installed in standard PR CI. Run
-// explicitly on machines with torch available:
+// Requires Linux `/dev/shm`, `torch`, and `tqdm` — not installed/enabled in
+// standard PR CI. Run explicitly on Linux machines with torch available:
 //   cargo test --test example-smoke -- --ignored smoke_memory_pool
 // or via `scripts/smoke-all.sh` (skips gracefully when download.pytorch.org
 // is unreachable; torch is installed by per-node `build:` steps).
 // ---------------------------------------------------------------------------
 
+fn memory_pool_transport_available() -> bool {
+    if cfg!(target_os = "linux") {
+        true
+    } else {
+        eprintln!("skipping memory-pool smoke: memory-pool transport requires Linux /dev/shm");
+        false
+    }
+}
+
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_memory_pool_cpu2cpu() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test(
         "memory-pool-cpu2cpu",
         "examples/memory-pool/cpu2cpu.yml",
@@ -1904,8 +2072,11 @@ fn smoke_memory_pool_cpu2cpu() {
 }
 
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_local_memory_pool_cpu2cpu() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test_local(
         "local-memory-pool-cpu2cpu",
         "examples/memory-pool/cpu2cpu.yml",
@@ -1915,8 +2086,11 @@ fn smoke_local_memory_pool_cpu2cpu() {
 
 // Negative-lifecycle scenarios validate the "warn, don't crash" contract.
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_local_memory_pool_auto_cleanup() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test_local(
         "local-memory-pool-auto-cleanup",
         "examples/memory-pool/auto_cleanup.yml",
@@ -1925,8 +2099,11 @@ fn smoke_local_memory_pool_auto_cleanup() {
 }
 
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_local_memory_pool_duplicate_free() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test_local(
         "local-memory-pool-duplicate-free",
         "examples/memory-pool/duplicate_free.yml",
@@ -1935,8 +2112,11 @@ fn smoke_local_memory_pool_duplicate_free() {
 }
 
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_local_memory_pool_read_after_free() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test_local(
         "local-memory-pool-read-after-free",
         "examples/memory-pool/read_after_free.yml",
@@ -1945,8 +2125,11 @@ fn smoke_local_memory_pool_read_after_free() {
 }
 
 #[test]
-#[ignore = "requires `torch` and `tqdm` (not in standard CI)"]
+#[ignore = "requires Linux /dev/shm, `torch`, and `tqdm` (not in standard CI)"]
 fn smoke_local_memory_pool_write_after_free() {
+    if !memory_pool_transport_available() {
+        return;
+    }
     run_smoke_test_local(
         "local-memory-pool-write-after-free",
         "examples/memory-pool/write_after_free.yml",
@@ -1985,8 +2168,10 @@ fn smoke_local_memory_pool_write_after_free() {
 // | dynamic-add-remove        | blocker: `dora node add` times out +                 | #1682    |
 // |                           | corrupts dataflow state                              |          |
 // | dynamic-agent-tools       | blocker: same as dynamic-add-remove                  | #1682    |
-// | python-parquet-recorder   | blocker: no test written; low-priority               | —        |
-// | python-yolo-detection     | blocker: needs YOLO model weights                    | —        |
+// | python-parquet-recorder   | covered: dependency contract; runtime still needs    | —        |
+// |                           | a camera/OpenCV device                               |          |
+// | python-yolo-detection     | covered: dependency contract; runtime still needs    | —        |
+// |                           | YOLO model weights, OpenCV display, and camera       |          |
 // | ros2-bridge               | blocker: needs ROS2 runtime                          | —        |
 // | ros2-comparison           | blocker: needs ROS2 runtime                          | —        |
 // | c-dataflow                | covered: `cli` job (3 OS), ci.yml CLI tests          | covered  |

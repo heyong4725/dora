@@ -40,7 +40,7 @@ If you only remember one command: **`make qa-fast`**.
 First-time setup on a fresh clone:
 
 ```bash
-make qa-install     # installs cargo-audit, cargo-deny, cargo-llvm-cov, cargo-mutants, cargo-semver-checks
+make qa-install     # installs cargo-audit, cargo-deny, cargo-llvm-cov, cargo-mutants, cargo-semver-checks, typos-cli
 pip install diff-cover   # optional; enables diff coverage gate
 rustup component add miri --toolchain nightly   # optional; for unsafe-code analysis
 ```
@@ -67,6 +67,7 @@ rustup component add miri --toolchain nightly   # optional; for unsafe-code anal
 | `make qa-coverage` | `cargo llvm-cov` (writes `lcov.info`) | ~5 min | To see coverage locally |
 | `make qa-mutants` | `cargo mutants --in-diff origin/main` on critical crates | ~5-30 min | To verify tests actually detect bugs |
 | `make qa-semver` | `cargo semver-checks` vs last tag | ~1-2 min | Before bumping published crate versions |
+| `make qa-user-story-tracker` | validates `docs/user-story-feature-status.csv` structure and row evidence | ~1 s | When updating the full-repo user-story audit tracker |
 
 All targets call scripts under `scripts/qa/`. The scripts are the source of truth — if something looks wrong, read the script.
 

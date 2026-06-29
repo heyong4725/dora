@@ -1,11 +1,13 @@
 nodes:
   - id: sender
     path: sender.py
+    build: pip install pyarrow
     outputs:
       - message
 
   - id: transformer
     path: transformer.py
+    build: pip install pyarrow
     inputs:
       message: sender/message
     outputs:
@@ -13,6 +15,7 @@ nodes:
 
   - id: receiver
     path: receiver.py
+    build: pip install pyarrow
     inputs:
       message: sender/message
       transformed: transformer/transformed
